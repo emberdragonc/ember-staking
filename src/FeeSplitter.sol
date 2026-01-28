@@ -20,6 +20,7 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
     error ZeroAmount();
     error InvalidSplit();
     error NotRegisteredProject();
+    error InsufficientBalance();
 
     // ============ EVENTS ============
     event FeeReceived(
@@ -38,6 +39,11 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
         address indexed contributor,
         address indexed token,
         uint256 amount
+    );
+    event ContributorUpdated(
+        address indexed project,
+        address indexed oldContributor,
+        address indexed newContributor
     );
     event StakingContractUpdated(address indexed oldStaking, address indexed newStaking);
     event SplitUpdated(uint256 oldStakerBps, uint256 newStakerBps);
@@ -62,6 +68,9 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
     
     // Contributor pending claims (contributor => token => amount)
     mapping(address => mapping(address => uint256)) public pendingClaims;
+    
+    // Total pending claims per token (to prevent emergency withdraw abuse)
+    mapping(address => uint256) public totalPendingClaims;
     
     // Supported tokens
     mapping(address => bool) public supportedTokens;
@@ -135,6 +144,7 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
         // Add contributor share to pending claims
         address contributor = projects[project].contributor;
         pendingClaims[contributor][token] += contributorShare;
+        totalPendingClaims[token] += contributorShare;
 
         emit FeeReceived(project, token, amount, stakerShare, contributorShare);
     }
@@ -147,6 +157,7 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
             
             if (amount > 0) {
                 pendingClaims[msg.sender][token] = 0;
+                totalPendingClaims[token] -= amount;
                 IERC20(token).safeTransfer(msg.sender, amount);
                 emit ContributorClaimed(msg.sender, token, amount);
             }
@@ -158,6 +169,7 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
         uint256 amount = pendingClaims[msg.sender][token];
         if (amount > 0) {
             pendingClaims[msg.sender][token] = 0;
+            totalPendingClaims[token] -= amount;
             IERC20(token).safeTransfer(msg.sender, amount);
             emit ContributorClaimed(msg.sender, token, amount);
         }
@@ -213,8 +225,39 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
         stakerShareBps = newStakerBps;
     }
 
-    /// @notice Emergency withdraw stuck tokens
+    /// @notice Update contributor wallet for a project (for wallet recovery)
+    /// @param project The project address
+    /// @param newContributor The new contributor wallet
+    function updateContributor(address project, address newContributor) external onlyOwner {
+        if (newContributor == address(0)) revert ZeroAddress();
+        if (!projects[project].registered) revert NotRegisteredProject();
+        
+        address oldContributor = projects[project].contributor;
+        
+        // Transfer any pending claims from old to new contributor
+        for (uint256 i = 0; i < tokenList.length; i++) {
+            address token = tokenList[i];
+            uint256 pending = pendingClaims[oldContributor][token];
+            if (pending > 0) {
+                pendingClaims[oldContributor][token] = 0;
+                pendingClaims[newContributor][token] += pending;
+            }
+        }
+        
+        projects[project].contributor = newContributor;
+        emit ContributorUpdated(project, oldContributor, newContributor);
+    }
+
+    /// @notice Emergency withdraw stuck tokens (only excess, not owed to contributors)
+    /// @param token Token to withdraw
+    /// @param amount Amount to withdraw
     function emergencyWithdraw(address token, uint256 amount) external onlyOwner {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        uint256 owed = totalPendingClaims[token];
+        uint256 excess = balance > owed ? balance - owed : 0;
+        
+        if (amount > excess) revert InsufficientBalance();
+        
         IERC20(token).safeTransfer(owner(), amount);
     }
 }

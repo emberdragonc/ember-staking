@@ -21,6 +21,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     error NoUnstakeRequested();
     error InsufficientBalance();
     error TokenNotSupported();
+    error CooldownTooLong();
 
     // ============ EVENTS ============
     event Staked(address indexed user, uint256 amount);
@@ -44,6 +45,9 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
         mapping(address => uint256) rewards;
     }
 
+    // ============ CONSTANTS ============
+    uint256 public constant MAX_COOLDOWN = 30 days; // Max cooldown to prevent lockup abuse
+    
     // ============ STATE ============
     IERC20 public immutable stakingToken; // EMBER token
     
@@ -253,8 +257,9 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
         emit RewardTokenAdded(token);
     }
 
-    /// @notice Update cooldown period
+    /// @notice Update cooldown period (max 30 days to prevent lockup abuse)
     function setCooldownPeriod(uint256 newCooldown) external onlyOwner {
+        if (newCooldown > MAX_COOLDOWN) revert CooldownTooLong();
         emit CooldownUpdated(cooldownPeriod, newCooldown);
         cooldownPeriod = newCooldown;
     }

@@ -204,6 +204,16 @@ contract EmberStakingTest is Test {
         assertEq(staking.cooldownPeriod(), 7 days);
     }
     
+    function test_RevertSetCooldownTooLong() public {
+        vm.expectRevert(EmberStaking.CooldownTooLong.selector);
+        staking.setCooldownPeriod(31 days); // Over MAX_COOLDOWN of 30 days
+    }
+    
+    function test_SetCooldownAtMax() public {
+        staking.setCooldownPeriod(30 days); // Exactly MAX_COOLDOWN
+        assertEq(staking.cooldownPeriod(), 30 days);
+    }
+    
     function test_Pause() public {
         staking.pause();
         
