@@ -47,26 +47,23 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
 
     // ============ CONSTANTS ============
     uint256 public constant MAX_COOLDOWN = 30 days; // Max cooldown to prevent lockup abuse
-    
+
     // ============ STATE ============
     IERC20 public immutable stakingToken; // EMBER token
-    
+
     uint256 public totalStaked;
     uint256 public cooldownPeriod = 3 days;
-    
+
     mapping(address => uint256) public stakedBalance;
     mapping(address => UnstakeRequest) public unstakeRequests;
-    
+
     // Multi-token rewards
     address[] public rewardTokens;
     mapping(address => bool) public isRewardToken;
     mapping(address => RewardInfo) public rewardInfo;
 
     // ============ CONSTRUCTOR ============
-    constructor(
-        address _stakingToken,
-        address _initialOwner
-    ) Ownable(_initialOwner) {
+    constructor(address _stakingToken, address _initialOwner) Ownable(_initialOwner) {
         if (_stakingToken == address(0)) revert ZeroAddress();
         stakingToken = IERC20(_stakingToken);
     }
@@ -78,7 +75,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
             RewardInfo storage info = rewardInfo[token];
             info.rewardPerTokenStored = rewardPerToken(token);
             info.lastUpdateTime = block.timestamp;
-            
+
             if (account != address(0)) {
                 info.rewards[account] = earned(account, token);
                 info.userRewardPerTokenPaid[account] = info.rewardPerTokenStored;
@@ -88,7 +85,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     }
 
     // ============ VIEWS ============
-    
+
     /// @notice Get the current reward per token for a specific reward token
     function rewardPerToken(address token) public view returns (uint256) {
         if (totalStaked == 0) {
@@ -100,9 +97,8 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     /// @notice Calculate earned rewards for an account
     function earned(address account, address token) public view returns (uint256) {
         RewardInfo storage info = rewardInfo[token];
-        return (
-            (stakedBalance[account] * (rewardPerToken(token) - info.userRewardPerTokenPaid[account])) / 1e18
-        ) + info.rewards[account];
+        return ((stakedBalance[account] * (rewardPerToken(token) - info.userRewardPerTokenPaid[account])) / 1e18)
+            + info.rewards[account];
     }
 
     /// @notice Get all earned rewards for an account across all tokens
@@ -148,10 +144,10 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
 
         // If there's an existing request, add to it
         UnstakeRequest storage request = unstakeRequests[msg.sender];
-        
+
         stakedBalance[msg.sender] -= amount;
         totalStaked -= amount;
-        
+
         request.amount += amount;
         request.unlockTime = block.timestamp + cooldownPeriod;
 
@@ -161,7 +157,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     /// @notice Withdraw tokens after cooldown completes
     function withdraw() external nonReentrant {
         UnstakeRequest storage request = unstakeRequests[msg.sender];
-        
+
         if (request.amount == 0) revert NoUnstakeRequested();
         if (block.timestamp < request.unlockTime) revert CooldownNotComplete();
 
@@ -177,7 +173,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     /// @notice Cancel unstake request and re-stake tokens
     function cancelUnstake() external nonReentrant updateRewards(msg.sender) {
         UnstakeRequest storage request = unstakeRequests[msg.sender];
-        
+
         if (request.amount == 0) revert NoUnstakeRequested();
 
         uint256 amount = request.amount;
@@ -197,7 +193,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
         for (uint256 i = 0; i < rewardTokens.length; i++) {
             address token = rewardTokens[i];
             uint256 reward = rewardInfo[token].rewards[msg.sender];
-            
+
             if (reward > 0) {
                 rewardInfo[token].rewards[msg.sender] = 0;
                 IERC20(token).safeTransfer(msg.sender, reward);
@@ -209,7 +205,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     /// @notice Claim rewards for a specific token
     function claimReward(address token) external nonReentrant updateRewards(msg.sender) {
         if (!isRewardToken[token]) revert TokenNotSupported();
-        
+
         uint256 reward = rewardInfo[token].rewards[msg.sender];
         if (reward > 0) {
             rewardInfo[token].rewards[msg.sender] = 0;

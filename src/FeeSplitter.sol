@@ -30,57 +30,42 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
         uint256 stakerShare,
         uint256 contributorShare
     );
-    event ProjectRegistered(
-        address indexed project,
-        address indexed contributor,
-        string ideaDescription
-    );
-    event ContributorClaimed(
-        address indexed contributor,
-        address indexed token,
-        uint256 amount
-    );
-    event ContributorUpdated(
-        address indexed project,
-        address indexed oldContributor,
-        address indexed newContributor
-    );
+    event ProjectRegistered(address indexed project, address indexed contributor, string ideaDescription);
+    event ContributorClaimed(address indexed contributor, address indexed token, uint256 amount);
+    event ContributorUpdated(address indexed project, address indexed oldContributor, address indexed newContributor);
     event StakingContractUpdated(address indexed oldStaking, address indexed newStaking);
     event SplitUpdated(uint256 oldStakerBps, uint256 newStakerBps);
 
     // ============ STRUCTS ============
     struct ProjectInfo {
-        address contributor;      // Wallet that receives contributor share
-        string ideaDescription;   // Brief description of the idea
+        address contributor; // Wallet that receives contributor share
+        string ideaDescription; // Brief description of the idea
         bool registered;
     }
 
     // ============ STATE ============
     EmberStaking public stakingContract;
-    
+
     // Split configuration (in basis points, 10000 = 100%)
-    uint256 public stakerShareBps = 5000;  // 50% to stakers
+    uint256 public stakerShareBps = 5000; // 50% to stakers
     uint256 public constant MAX_BPS = 10000;
-    
+
     // Project registry
     mapping(address => ProjectInfo) public projects;
     address[] public projectList;
-    
+
     // Contributor pending claims (contributor => token => amount)
     mapping(address => mapping(address => uint256)) public pendingClaims;
-    
+
     // Total pending claims per token (to prevent emergency withdraw abuse)
     mapping(address => uint256) public totalPendingClaims;
-    
+
     // Supported tokens
     mapping(address => bool) public supportedTokens;
     address[] public tokenList;
 
     // ============ CONSTRUCTOR ============
-    constructor(
-        address _stakingContract,
-        address _initialOwner
-    ) Ownable(_initialOwner) {
+    constructor(address _stakingContract, address _initialOwner) Ownable(_initialOwner) {
         if (_stakingContract == address(0)) revert ZeroAddress();
         stakingContract = EmberStaking(_stakingContract);
     }
@@ -88,10 +73,10 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
     // ============ VIEWS ============
 
     /// @notice Get pending claims for a contributor across all tokens
-    function getPendingClaims(address contributor) 
-        external 
-        view 
-        returns (address[] memory tokens, uint256[] memory amounts) 
+    function getPendingClaims(address contributor)
+        external
+        view
+        returns (address[] memory tokens, uint256[] memory amounts)
     {
         tokens = tokenList;
         amounts = new uint256[](tokenList.length);
@@ -101,11 +86,11 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
     }
 
     /// @notice Get project info
-    function getProject(address project) external view returns (
-        address contributor,
-        string memory ideaDescription,
-        bool registered
-    ) {
+    function getProject(address project)
+        external
+        view
+        returns (address contributor, string memory ideaDescription, bool registered)
+    {
         ProjectInfo storage info = projects[project];
         return (info.contributor, info.ideaDescription, info.registered);
     }
@@ -121,11 +106,7 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
     /// @param project The project contract address
     /// @param token The fee token (WETH or EMBER)
     /// @param amount The total fee amount
-    function receiveFee(
-        address project,
-        address token,
-        uint256 amount
-    ) external nonReentrant {
+    function receiveFee(address project, address token, uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
         if (!projects[project].registered) revert NotRegisteredProject();
         if (!supportedTokens[token]) revert ZeroAddress();
@@ -154,7 +135,7 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
         for (uint256 i = 0; i < tokenList.length; i++) {
             address token = tokenList[i];
             uint256 amount = pendingClaims[msg.sender][token];
-            
+
             if (amount > 0) {
                 pendingClaims[msg.sender][token] = 0;
                 totalPendingClaims[token] -= amount;
@@ -181,22 +162,14 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
     /// @param project The deployed project contract address
     /// @param contributor The wallet address to receive contributor fees
     /// @param ideaDescription Brief description of the idea
-    function registerProject(
-        address project,
-        address contributor,
-        string calldata ideaDescription
-    ) external onlyOwner {
+    function registerProject(address project, address contributor, string calldata ideaDescription) external onlyOwner {
         if (project == address(0) || contributor == address(0)) revert ZeroAddress();
-        
+
         if (!projects[project].registered) {
             projectList.push(project);
         }
-        
-        projects[project] = ProjectInfo({
-            contributor: contributor,
-            ideaDescription: ideaDescription,
-            registered: true
-        });
+
+        projects[project] = ProjectInfo({contributor: contributor, ideaDescription: ideaDescription, registered: true});
 
         emit ProjectRegistered(project, contributor, ideaDescription);
     }
@@ -231,9 +204,9 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
     function updateContributor(address project, address newContributor) external onlyOwner {
         if (newContributor == address(0)) revert ZeroAddress();
         if (!projects[project].registered) revert NotRegisteredProject();
-        
+
         address oldContributor = projects[project].contributor;
-        
+
         // Transfer any pending claims from old to new contributor
         for (uint256 i = 0; i < tokenList.length; i++) {
             address token = tokenList[i];
@@ -243,7 +216,7 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
                 pendingClaims[newContributor][token] += pending;
             }
         }
-        
+
         projects[project].contributor = newContributor;
         emit ContributorUpdated(project, oldContributor, newContributor);
     }
@@ -255,9 +228,9 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
         uint256 balance = IERC20(token).balanceOf(address(this));
         uint256 owed = totalPendingClaims[token];
         uint256 excess = balance > owed ? balance - owed : 0;
-        
+
         if (amount > excess) revert InsufficientBalance();
-        
+
         IERC20(token).safeTransfer(owner(), amount);
     }
 }
