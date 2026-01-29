@@ -82,7 +82,7 @@ contract EmberStakingTest is Test {
 
         assertEq(staking.stakedBalance(alice), amount);
     }
-    
+
     function test_RevertStakeBelowMinimum() public {
         vm.prank(alice);
         vm.expectRevert(EmberStaking.StakeBelowMinimum.selector);
@@ -238,16 +238,16 @@ contract EmberStakingTest is Test {
 
         assertEq(staking.stakedBalance(alice), MIN_STAKE);
     }
-    
+
     // ============ NEW SECURITY TESTS ============
-    
+
     function test_DeprecateRewardToken() public {
         // Deprecate WETH
         staking.deprecateRewardToken(address(weth));
-        
+
         // Should no longer be active
         assertFalse(staking.isRewardToken(address(weth)));
-        
+
         // Deposits should fail now
         weth.mint(address(this), 10 ether);
         weth.approve(address(staking), 10 ether);

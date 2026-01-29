@@ -133,7 +133,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     /// @dev Minimum stake is 1M EMBER to prevent dust spam
     function stake(uint256 amount) external nonReentrant whenNotPaused updateRewards(msg.sender) {
         if (amount == 0) revert ZeroAmount();
-        
+
         // Check minimum stake (either new stake meets minimum, or adding to existing position)
         uint256 newBalance = stakedBalance[msg.sender] + amount;
         if (newBalance < MIN_STAKE) revert StakeBelowMinimum();
