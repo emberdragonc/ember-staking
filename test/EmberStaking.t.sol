@@ -315,7 +315,7 @@ contract EmberStakingTest is Test {
         // Setup: Alice stakes and earns rewards
         vm.prank(alice);
         staking.stake(MIN_STAKE);
-        
+
         // Fast forward past MIN_STAKE_DURATION for rewards to accrue
         vm.warp(block.timestamp + 2 hours);
 
@@ -336,7 +336,7 @@ contract EmberStakingTest is Test {
         // Setup: Alice stakes and earns rewards
         vm.prank(alice);
         staking.stake(MIN_STAKE);
-        
+
         // Fast forward past MIN_STAKE_DURATION
         vm.warp(block.timestamp + 2 hours);
 
@@ -364,7 +364,7 @@ contract EmberStakingTest is Test {
     function test_H1_TotalOwedRewardsTracking() public {
         vm.prank(alice);
         staking.stake(MIN_STAKE);
-        
+
         vm.warp(block.timestamp + 2 hours);
 
         // Deposit rewards
@@ -450,7 +450,7 @@ contract EmberStakingTest is Test {
         // A production system might track "qualifying stake" for perfect distribution.
         assertEq(staking.earned(alice, address(weth)), 0, "Flash-staker should earn 0");
         assertEq(staking.earned(bob, address(weth)), 5 ether, "Bob gets 50% (rest locked from flash-stake)");
-        
+
         // Verify Alice truly can't claim - her share stays in contract
         vm.prank(alice);
         staking.claimRewards();
