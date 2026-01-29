@@ -23,47 +23,34 @@ contract RewardVester is Ownable, ReentrancyGuard {
     error TooManySchedules();
 
     // ============ EVENTS ============
-    event ScheduleCreated(
-        uint256 indexed scheduleId,
-        uint256 totalAmount,
-        uint256 startTime,
-        uint256 duration
-    );
-    event TokensReleased(
-        uint256 indexed scheduleId,
-        uint256 amount,
-        uint256 totalReleased
-    );
+    event ScheduleCreated(uint256 indexed scheduleId, uint256 totalAmount, uint256 startTime, uint256 duration);
+    event TokensReleased(uint256 indexed scheduleId, uint256 amount, uint256 totalReleased);
     event ScheduleCancelled(uint256 indexed scheduleId, uint256 returnedAmount);
     event StakingContractUpdated(address indexed oldStaking, address indexed newStaking);
 
     // ============ STRUCTS ============
     struct VestingSchedule {
-        uint256 totalAmount;      // Total tokens to vest
-        uint256 released;         // Amount already released
-        uint256 startTime;        // When vesting starts
-        uint256 duration;         // Vesting duration in seconds
-        bool active;              // Whether schedule is active
+        uint256 totalAmount; // Total tokens to vest
+        uint256 released; // Amount already released
+        uint256 startTime; // When vesting starts
+        uint256 duration; // Vesting duration in seconds
+        bool active; // Whether schedule is active
     }
 
     // ============ CONSTANTS ============
     uint256 public constant MAX_SCHEDULES = 50; // Prevent unbounded array
 
     // ============ STATE ============
-    IERC20 public immutable rewardToken;        // EMBER token
-    address public stakingContract;              // EmberStaking contract
+    IERC20 public immutable rewardToken; // EMBER token
+    address public stakingContract; // EmberStaking contract
 
     VestingSchedule[] public schedules;
 
     // ============ CONSTRUCTOR ============
-    constructor(
-        address _rewardToken,
-        address _stakingContract,
-        address _initialOwner
-    ) Ownable(_initialOwner) {
+    constructor(address _rewardToken, address _stakingContract, address _initialOwner) Ownable(_initialOwner) {
         if (_rewardToken == address(0)) revert ZeroAddress();
         if (_stakingContract == address(0)) revert ZeroAddress();
-        
+
         rewardToken = IERC20(_rewardToken);
         stakingContract = _stakingContract;
     }
@@ -80,7 +67,7 @@ contract RewardVester is Ownable, ReentrancyGuard {
     /// @return amount The amount that can be released now
     function releasable(uint256 scheduleId) public view returns (uint256 amount) {
         if (scheduleId >= schedules.length) revert InvalidScheduleId();
-        
+
         VestingSchedule storage schedule = schedules[scheduleId];
         if (!schedule.active) return 0;
         if (block.timestamp < schedule.startTime) return 0;
@@ -98,20 +85,24 @@ contract RewardVester is Ownable, ReentrancyGuard {
 
     /// @notice Get schedule details with computed fields
     /// @param scheduleId The schedule index
-    function getSchedule(uint256 scheduleId) external view returns (
-        uint256 totalAmount,
-        uint256 released,
-        uint256 startTime,
-        uint256 duration,
-        uint256 endTime,
-        uint256 vestedAmount,
-        uint256 releasableAmount,
-        bool active
-    ) {
+    function getSchedule(uint256 scheduleId)
+        external
+        view
+        returns (
+            uint256 totalAmount,
+            uint256 released,
+            uint256 startTime,
+            uint256 duration,
+            uint256 endTime,
+            uint256 vestedAmount,
+            uint256 releasableAmount,
+            bool active
+        )
+    {
         if (scheduleId >= schedules.length) revert InvalidScheduleId();
-        
+
         VestingSchedule storage schedule = schedules[scheduleId];
-        
+
         totalAmount = schedule.totalAmount;
         released = schedule.released;
         startTime = schedule.startTime;
@@ -129,29 +120,25 @@ contract RewardVester is Ownable, ReentrancyGuard {
     /// @return released The amount released
     function release(uint256 scheduleId) external nonReentrant returns (uint256 released) {
         if (scheduleId >= schedules.length) revert InvalidScheduleId();
-        
+
         VestingSchedule storage schedule = schedules[scheduleId];
         if (!schedule.active) revert InvalidScheduleId();
         if (block.timestamp < schedule.startTime) revert ScheduleNotStarted();
 
         uint256 vested = _vestedAmount(schedule);
         released = vested - schedule.released;
-        
+
         if (released == 0) revert NothingToRelease();
 
         schedule.released = vested;
 
         // Approve and deposit to staking contract
         rewardToken.approve(stakingContract, released);
-        
+
         // Call depositRewards on staking contract
         // Interface: depositRewards(address token, uint256 amount)
         (bool success,) = stakingContract.call(
-            abi.encodeWithSignature(
-                "depositRewards(address,uint256)",
-                address(rewardToken),
-                released
-            )
+            abi.encodeWithSignature("depositRewards(address,uint256)", address(rewardToken), released)
         );
         require(success, "depositRewards failed");
 
@@ -168,7 +155,7 @@ contract RewardVester is Ownable, ReentrancyGuard {
 
             uint256 vested = _vestedAmount(schedule);
             uint256 toRelease = vested - schedule.released;
-            
+
             if (toRelease > 0) {
                 schedule.released = vested;
                 totalReleased += toRelease;
@@ -180,13 +167,9 @@ contract RewardVester is Ownable, ReentrancyGuard {
 
         // Approve and deposit all at once
         rewardToken.approve(stakingContract, totalReleased);
-        
+
         (bool success,) = stakingContract.call(
-            abi.encodeWithSignature(
-                "depositRewards(address,uint256)",
-                address(rewardToken),
-                totalReleased
-            )
+            abi.encodeWithSignature("depositRewards(address,uint256)", address(rewardToken), totalReleased)
         );
         require(success, "depositRewards failed");
     }
@@ -198,11 +181,11 @@ contract RewardVester is Ownable, ReentrancyGuard {
     /// @param startTime When vesting begins (can be in the past for immediate start)
     /// @param duration Vesting duration in seconds
     /// @return scheduleId The new schedule's index
-    function createSchedule(
-        uint256 amount,
-        uint256 startTime,
-        uint256 duration
-    ) external onlyOwner returns (uint256 scheduleId) {
+    function createSchedule(uint256 amount, uint256 startTime, uint256 duration)
+        external
+        onlyOwner
+        returns (uint256 scheduleId)
+    {
         if (amount == 0) revert ZeroAmount();
         if (duration == 0) revert ZeroDuration();
         if (schedules.length >= MAX_SCHEDULES) revert TooManySchedules();
@@ -211,13 +194,9 @@ contract RewardVester is Ownable, ReentrancyGuard {
         rewardToken.safeTransferFrom(msg.sender, address(this), amount);
 
         scheduleId = schedules.length;
-        schedules.push(VestingSchedule({
-            totalAmount: amount,
-            released: 0,
-            startTime: startTime,
-            duration: duration,
-            active: true
-        }));
+        schedules.push(
+            VestingSchedule({totalAmount: amount, released: 0, startTime: startTime, duration: duration, active: true})
+        );
 
         emit ScheduleCreated(scheduleId, amount, startTime, duration);
     }
@@ -226,7 +205,7 @@ contract RewardVester is Ownable, ReentrancyGuard {
     /// @param scheduleId The schedule to cancel
     function cancelSchedule(uint256 scheduleId) external onlyOwner {
         if (scheduleId >= schedules.length) revert InvalidScheduleId();
-        
+
         VestingSchedule storage schedule = schedules[scheduleId];
         if (!schedule.active) revert InvalidScheduleId();
 
@@ -244,10 +223,10 @@ contract RewardVester is Ownable, ReentrancyGuard {
     /// @param newStaking The new staking contract address
     function setStakingContract(address newStaking) external onlyOwner {
         if (newStaking == address(0)) revert ZeroAddress();
-        
+
         address oldStaking = stakingContract;
         stakingContract = newStaking;
-        
+
         emit StakingContractUpdated(oldStaking, newStaking);
     }
 
@@ -262,7 +241,7 @@ contract RewardVester is Ownable, ReentrancyGuard {
             uint256 excess = balance > committed ? balance - committed : 0;
             require(amount <= excess, "Cannot withdraw committed tokens");
         }
-        
+
         IERC20(token).safeTransfer(owner(), amount);
     }
 
