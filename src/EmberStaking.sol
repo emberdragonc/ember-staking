@@ -111,12 +111,12 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     /// @dev M-2 Fix: Only accrues rewards if staked for MIN_STAKE_DURATION (prevents flash-stake attacks)
     function earned(address account, address token) public view returns (uint256) {
         RewardInfo storage info = rewardInfo[token];
-        
+
         // M-2: If user hasn't staked long enough, they only get already-stored rewards
         if (block.timestamp < stakeStartTime[account] + MIN_STAKE_DURATION) {
             return info.rewards[account];
         }
-        
+
         return ((stakedBalance[account] * (rewardPerToken(token) - info.userRewardPerTokenPaid[account])) / 1e18)
             + info.rewards[account];
     }
@@ -184,12 +184,9 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
             // Calculate weighted average unlock time
             // existingWeight = existing amount * remaining time
             // newWeight = new amount * full cooldown
-            uint256 remainingTime = request.unlockTime > block.timestamp 
-                ? request.unlockTime - block.timestamp 
-                : 0;
-            uint256 newUnlockTime = block.timestamp + (
-                (request.amount * remainingTime + amount * cooldownPeriod) / (request.amount + amount)
-            );
+            uint256 remainingTime = request.unlockTime > block.timestamp ? request.unlockTime - block.timestamp : 0;
+            uint256 newUnlockTime = block.timestamp
+                + ((request.amount * remainingTime + amount * cooldownPeriod) / (request.amount + amount));
             request.unlockTime = newUnlockTime;
         } else {
             request.unlockTime = block.timestamp + cooldownPeriod;
@@ -304,7 +301,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
         RewardInfo storage info = rewardInfo[token];
         info.rewardPerTokenStored += (amount * 1e18) / totalStaked;
         info.lastUpdateTime = block.timestamp;
-        
+
         // H-1: Track total owed for this token
         totalOwedRewards[token] += amount;
 
