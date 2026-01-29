@@ -24,6 +24,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     error CooldownTooLong();
     error TooManyRewardTokens();
     error StakeBelowMinimum();
+    error TokenHasUnclaimedRewards();
 
     // ============ EVENTS ============
     event Staked(address indexed user, uint256 amount);
@@ -52,6 +53,10 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     uint256 public constant MAX_COOLDOWN = 30 days; // Max cooldown to prevent lockup abuse
     uint256 public constant MAX_REWARD_TOKENS = 20; // Prevent unbounded array DoS
     uint256 public constant MIN_STAKE = 1_000_000 * 1e18; // 1M EMBER minimum (~$8.63) to prevent dust spam
+    /// @dev M-2: Minimum stake time before rewards accrue (prevents flash-stake attacks)
+    /// NOTE: Flash-stakers dilute rewards but can't claim them. Their share is effectively locked.
+    /// This is an accepted tradeoff for simplicity vs tracking "qualifying stake" separately.
+    uint256 public constant MIN_STAKE_DURATION = 1 hours;
 
     // ============ STATE ============
     IERC20 public immutable stakingToken; // EMBER token
@@ -61,11 +66,14 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
 
     mapping(address => uint256) public stakedBalance;
     mapping(address => UnstakeRequest) public unstakeRequests;
+    mapping(address => uint256) public stakeStartTime; // M-2: Track when user first staked for flash-stake protection
 
     // Multi-token rewards
     address[] public rewardTokens;
     mapping(address => bool) public isRewardToken;
+    mapping(address => bool) public wasEverRewardToken; // H-1: Track tokens that were ever reward tokens
     mapping(address => RewardInfo) public rewardInfo;
+    mapping(address => uint256) public totalOwedRewards; // H-1: Track total owed rewards per token
 
     // ============ CONSTRUCTOR ============
     constructor(address _stakingToken, address _initialOwner) Ownable(_initialOwner) {
@@ -100,8 +108,15 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     }
 
     /// @notice Calculate earned rewards for an account
+    /// @dev M-2 Fix: Only accrues rewards if staked for MIN_STAKE_DURATION (prevents flash-stake attacks)
     function earned(address account, address token) public view returns (uint256) {
         RewardInfo storage info = rewardInfo[token];
+        
+        // M-2: If user hasn't staked long enough, they only get already-stored rewards
+        if (block.timestamp < stakeStartTime[account] + MIN_STAKE_DURATION) {
+            return info.rewards[account];
+        }
+        
         return ((stakedBalance[account] * (rewardPerToken(token) - info.userRewardPerTokenPaid[account])) / 1e18)
             + info.rewards[account];
     }
@@ -131,12 +146,18 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     /// @notice Stake EMBER tokens
     /// @param amount Amount of EMBER to stake
     /// @dev Minimum stake is 1M EMBER to prevent dust spam
+    /// @dev M-2: Records stake start time for flash-stake protection
     function stake(uint256 amount) external nonReentrant whenNotPaused updateRewards(msg.sender) {
         if (amount == 0) revert ZeroAmount();
 
         // Check minimum stake (either new stake meets minimum, or adding to existing position)
         uint256 newBalance = stakedBalance[msg.sender] + amount;
         if (newBalance < MIN_STAKE) revert StakeBelowMinimum();
+
+        // M-2: Set stake start time for new stakers (existing stakers keep their time)
+        if (stakedBalance[msg.sender] == 0) {
+            stakeStartTime[msg.sender] = block.timestamp;
+        }
 
         stakedBalance[msg.sender] = newBalance;
         totalStaked += amount;
@@ -148,18 +169,33 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
 
     /// @notice Request to unstake tokens (starts cooldown)
     /// @param amount Amount to unstake
+    /// @dev M-3 Fix: Pro-rata cooldown when adding to existing request
     function requestUnstake(uint256 amount) external nonReentrant updateRewards(msg.sender) {
         if (amount == 0) revert ZeroAmount();
         if (stakedBalance[msg.sender] < amount) revert InsufficientBalance();
 
-        // If there's an existing request, add to it
         UnstakeRequest storage request = unstakeRequests[msg.sender];
 
         stakedBalance[msg.sender] -= amount;
         totalStaked -= amount;
 
+        // M-3: Pro-rata cooldown calculation when adding to existing request
+        if (request.amount > 0) {
+            // Calculate weighted average unlock time
+            // existingWeight = existing amount * remaining time
+            // newWeight = new amount * full cooldown
+            uint256 remainingTime = request.unlockTime > block.timestamp 
+                ? request.unlockTime - block.timestamp 
+                : 0;
+            uint256 newUnlockTime = block.timestamp + (
+                (request.amount * remainingTime + amount * cooldownPeriod) / (request.amount + amount)
+            );
+            request.unlockTime = newUnlockTime;
+        } else {
+            request.unlockTime = block.timestamp + cooldownPeriod;
+        }
+
         request.amount += amount;
-        request.unlockTime = block.timestamp + cooldownPeriod;
 
         emit UnstakeRequested(msg.sender, amount, request.unlockTime);
     }
@@ -206,6 +242,8 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
 
             if (reward > 0) {
                 rewardInfo[token].rewards[msg.sender] = 0;
+                // H-1: Decrease total owed for this token
+                totalOwedRewards[token] -= reward;
                 IERC20(token).safeTransfer(msg.sender, reward);
                 emit RewardsClaimed(msg.sender, token, reward);
             }
@@ -214,11 +252,14 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
 
     /// @notice Claim rewards for a specific token
     function claimReward(address token) external nonReentrant updateRewards(msg.sender) {
-        if (!isRewardToken[token]) revert TokenNotSupported();
+        // Allow claiming from deprecated tokens (wasEverRewardToken) but not random tokens
+        if (!wasEverRewardToken[token]) revert TokenNotSupported();
 
         uint256 reward = rewardInfo[token].rewards[msg.sender];
         if (reward > 0) {
             rewardInfo[token].rewards[msg.sender] = 0;
+            // H-1: Decrease total owed for this token
+            totalOwedRewards[token] -= reward;
             IERC20(token).safeTransfer(msg.sender, reward);
             emit RewardsClaimed(msg.sender, token, reward);
         }
@@ -231,6 +272,8 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
         if (reward == 0) revert ZeroAmount();
 
         rewardInfo[emberToken].rewards[msg.sender] = 0;
+        // H-1: Decrease total owed for this token
+        totalOwedRewards[emberToken] -= reward;
 
         // Add directly to stake instead of transferring out
         stakedBalance[msg.sender] += reward;
@@ -261,6 +304,9 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
         RewardInfo storage info = rewardInfo[token];
         info.rewardPerTokenStored += (amount * 1e18) / totalStaked;
         info.lastUpdateTime = block.timestamp;
+        
+        // H-1: Track total owed for this token
+        totalOwedRewards[token] += amount;
 
         emit RewardsDeposited(token, amount);
     }
@@ -275,6 +321,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
 
         rewardTokens.push(token);
         isRewardToken[token] = true;
+        wasEverRewardToken[token] = true; // H-1: Track that this was ever a reward token
         rewardInfo[token].lastUpdateTime = block.timestamp;
 
         emit RewardTokenAdded(token);
@@ -305,10 +352,15 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
         _unpause();
     }
 
-    /// @notice Emergency withdraw stuck tokens (not staking or reward tokens)
+    /// @notice Emergency withdraw stuck tokens (not staking or reward tokens with unclaimed rewards)
+    /// @dev H-1 Fix: Prevents draining deprecated tokens that have unclaimed user rewards
     function emergencyWithdraw(address token, uint256 amount) external onlyOwner {
         if (token == address(stakingToken)) revert TokenNotSupported();
         if (isRewardToken[token]) revert TokenNotSupported();
+        // H-1: Prevent withdrawal of deprecated reward tokens that still have unclaimed rewards
+        if (wasEverRewardToken[token] && totalOwedRewards[token] > 0) {
+            revert TokenHasUnclaimedRewards();
+        }
         IERC20(token).safeTransfer(owner(), amount);
     }
 }

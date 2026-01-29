@@ -160,6 +160,9 @@ contract EmberStakingTest is Test {
         vm.prank(alice);
         staking.stake(MIN_STAKE);
 
+        // M-2: Wait past MIN_STAKE_DURATION for rewards to accrue
+        vm.warp(block.timestamp + 2 hours);
+
         // Deposit WETH rewards
         weth.mint(address(this), 10 ether);
         weth.approve(address(staking), 10 ether);
@@ -177,6 +180,9 @@ contract EmberStakingTest is Test {
         vm.prank(bob);
         staking.stake(2 * MIN_STAKE);
 
+        // M-2: Wait past MIN_STAKE_DURATION for rewards to accrue
+        vm.warp(block.timestamp + 2 hours);
+
         // Deposit 30 WETH rewards
         weth.mint(address(this), 30 ether);
         weth.approve(address(staking), 30 ether);
@@ -190,6 +196,9 @@ contract EmberStakingTest is Test {
     function test_ClaimRewards() public {
         vm.prank(alice);
         staking.stake(MIN_STAKE);
+
+        // M-2: Wait past MIN_STAKE_DURATION for rewards to accrue
+        vm.warp(block.timestamp + 2 hours);
 
         weth.mint(address(this), 10 ether);
         weth.approve(address(staking), 10 ether);
@@ -208,6 +217,9 @@ contract EmberStakingTest is Test {
         // Alice stakes 1M EMBER
         vm.prank(alice);
         staking.stake(MIN_STAKE);
+
+        // M-2: Wait past MIN_STAKE_DURATION for rewards to accrue
+        vm.warp(block.timestamp + 2 hours);
 
         // Deposit EMBER as rewards (compound scenario)
         ember.mint(address(this), 100_000 ether); // 100k EMBER rewards
@@ -295,5 +307,222 @@ contract EmberStakingTest is Test {
         weth.approve(address(staking), 10 ether);
         vm.expectRevert(EmberStaking.TokenNotSupported.selector);
         staking.depositRewards(address(weth), 10 ether);
+    }
+
+    // ============ H-1: DEPRECATED REWARD TOKEN DRAIN FIX ============
+
+    function test_H1_CannotEmergencyWithdrawDeprecatedTokenWithUnclaimedRewards() public {
+        // Setup: Alice stakes and earns rewards
+        vm.prank(alice);
+        staking.stake(MIN_STAKE);
+        
+        // Fast forward past MIN_STAKE_DURATION for rewards to accrue
+        vm.warp(block.timestamp + 2 hours);
+
+        // Deposit WETH rewards
+        weth.mint(address(this), 10 ether);
+        weth.approve(address(staking), 10 ether);
+        staking.depositRewards(address(weth), 10 ether);
+
+        // Deprecate WETH
+        staking.deprecateRewardToken(address(weth));
+
+        // Owner tries to emergency withdraw - should fail due to unclaimed rewards
+        vm.expectRevert(EmberStaking.TokenHasUnclaimedRewards.selector);
+        staking.emergencyWithdraw(address(weth), 10 ether);
+    }
+
+    function test_H1_CanEmergencyWithdrawDeprecatedTokenAfterAllClaimed() public {
+        // Setup: Alice stakes and earns rewards
+        vm.prank(alice);
+        staking.stake(MIN_STAKE);
+        
+        // Fast forward past MIN_STAKE_DURATION
+        vm.warp(block.timestamp + 2 hours);
+
+        // Deposit WETH rewards
+        weth.mint(address(this), 10 ether);
+        weth.approve(address(staking), 10 ether);
+        staking.depositRewards(address(weth), 10 ether);
+
+        // Alice claims all rewards
+        vm.prank(alice);
+        staking.claimRewards();
+
+        // Deprecate WETH
+        staking.deprecateRewardToken(address(weth));
+
+        // Send some extra WETH to contract (accident/dust)
+        weth.mint(address(staking), 1 ether);
+
+        // Owner CAN emergency withdraw the extra because totalOwedRewards is 0
+        uint256 ownerBalBefore = weth.balanceOf(owner);
+        staking.emergencyWithdraw(address(weth), 1 ether);
+        assertEq(weth.balanceOf(owner), ownerBalBefore + 1 ether);
+    }
+
+    function test_H1_TotalOwedRewardsTracking() public {
+        vm.prank(alice);
+        staking.stake(MIN_STAKE);
+        
+        vm.warp(block.timestamp + 2 hours);
+
+        // Deposit rewards
+        weth.mint(address(this), 100 ether);
+        weth.approve(address(staking), 100 ether);
+        staking.depositRewards(address(weth), 100 ether);
+
+        assertEq(staking.totalOwedRewards(address(weth)), 100 ether);
+
+        // Alice claims
+        vm.prank(alice);
+        staking.claimRewards();
+
+        assertEq(staking.totalOwedRewards(address(weth)), 0);
+    }
+
+    // ============ M-2: FLASH-STAKE PROTECTION FIX ============
+
+    function test_M2_NoRewardsBeforeMinStakeDuration() public {
+        // Alice stakes
+        vm.prank(alice);
+        staking.stake(MIN_STAKE);
+
+        // Immediately deposit rewards (simulating flash-stake attack)
+        weth.mint(address(this), 10 ether);
+        weth.approve(address(staking), 10 ether);
+        staking.depositRewards(address(weth), 10 ether);
+
+        // Alice should have 0 earned rewards (hasn't met MIN_STAKE_DURATION)
+        assertEq(staking.earned(alice, address(weth)), 0);
+
+        // Fast forward 30 minutes (not enough)
+        vm.warp(block.timestamp + 30 minutes);
+        assertEq(staking.earned(alice, address(weth)), 0);
+
+        // Fast forward past MIN_STAKE_DURATION (1 hour total)
+        vm.warp(block.timestamp + 31 minutes);
+        assertEq(staking.earned(alice, address(weth)), 10 ether);
+    }
+
+    function test_M2_ExistingStakersKeepTheirTime() public {
+        // Alice stakes first
+        vm.prank(alice);
+        staking.stake(MIN_STAKE);
+
+        // Wait past MIN_STAKE_DURATION
+        vm.warp(block.timestamp + 2 hours);
+
+        // Deposit rewards
+        weth.mint(address(this), 10 ether);
+        weth.approve(address(staking), 10 ether);
+        staking.depositRewards(address(weth), 10 ether);
+
+        // Alice earns immediately (already past duration)
+        assertEq(staking.earned(alice, address(weth)), 10 ether);
+
+        // Alice adds more stake - should keep original stakeStartTime
+        vm.prank(alice);
+        staking.stake(MIN_STAKE);
+
+        // Alice still earns (stakeStartTime not reset)
+        assertGt(staking.earned(alice, address(weth)), 0);
+    }
+
+    function test_M2_FlashStakeAttackPrevented() public {
+        // Bob stakes first and waits
+        vm.prank(bob);
+        staking.stake(MIN_STAKE);
+        vm.warp(block.timestamp + 2 hours);
+
+        // Attacker (Alice) sees reward deposit coming and flash-stakes
+        vm.prank(alice);
+        staking.stake(MIN_STAKE);
+
+        // Reward deposited - split based on totalStaked (50/50)
+        weth.mint(address(this), 10 ether);
+        weth.approve(address(staking), 10 ether);
+        staking.depositRewards(address(weth), 10 ether);
+
+        // M-2: Flash-staker can't claim rewards (protected)
+        // NOTE: Rewards are still distributed based on totalStaked, so Bob only gets 50%.
+        // Alice's 50% is effectively locked/unclaimed. This is an accepted tradeoff for simplicity.
+        // A production system might track "qualifying stake" for perfect distribution.
+        assertEq(staking.earned(alice, address(weth)), 0, "Flash-staker should earn 0");
+        assertEq(staking.earned(bob, address(weth)), 5 ether, "Bob gets 50% (rest locked from flash-stake)");
+        
+        // Verify Alice truly can't claim - her share stays in contract
+        vm.prank(alice);
+        staking.claimRewards();
+        assertEq(weth.balanceOf(alice), 0, "Alice received nothing");
+    }
+
+    // ============ M-3: PRO-RATA COOLDOWN FIX ============
+
+    function test_M3_ProRataCooldownCalculation() public {
+        vm.startPrank(alice);
+        staking.stake(3 * MIN_STAKE);
+
+        // First unstake request for 1M
+        staking.requestUnstake(MIN_STAKE);
+        (uint256 amount1, uint256 unlockTime1) = staking.unstakeRequests(alice);
+        assertEq(amount1, MIN_STAKE);
+        assertEq(unlockTime1, block.timestamp + 3 days);
+
+        // Wait 1 day (2 days remaining)
+        vm.warp(block.timestamp + 1 days);
+
+        // Add another 1M to unstake request
+        staking.requestUnstake(MIN_STAKE);
+        (uint256 amount2, uint256 unlockTime2) = staking.unstakeRequests(alice);
+        assertEq(amount2, 2 * MIN_STAKE);
+
+        // Pro-rata calculation:
+        // existing: 1M with 2 days remaining
+        // new: 1M with 3 days full cooldown
+        // weighted average: (1M * 2days + 1M * 3days) / 2M = 2.5 days from now
+        uint256 expectedUnlock = block.timestamp + 2.5 days;
+        assertEq(unlockTime2, expectedUnlock);
+        vm.stopPrank();
+    }
+
+    function test_M3_ProRataCooldownWithExpiredRequest() public {
+        vm.startPrank(alice);
+        staking.stake(3 * MIN_STAKE);
+
+        // First unstake request
+        staking.requestUnstake(MIN_STAKE);
+
+        // Wait past cooldown (request already expired)
+        vm.warp(block.timestamp + 4 days);
+
+        // Add more to unstake - expired portion has 0 remaining time
+        staking.requestUnstake(MIN_STAKE);
+        (uint256 amount, uint256 unlockTime) = staking.unstakeRequests(alice);
+
+        // Pro-rata: (1M * 0 + 1M * 3days) / 2M = 1.5 days from now
+        uint256 expectedUnlock = block.timestamp + 1.5 days;
+        assertEq(amount, 2 * MIN_STAKE);
+        assertEq(unlockTime, expectedUnlock);
+        vm.stopPrank();
+    }
+
+    function test_M3_CanStillWithdrawAfterProRataCooldown() public {
+        vm.startPrank(alice);
+        staking.stake(3 * MIN_STAKE);
+
+        staking.requestUnstake(MIN_STAKE);
+        vm.warp(block.timestamp + 1 days);
+        staking.requestUnstake(MIN_STAKE);
+
+        (uint256 amount, uint256 unlockTime) = staking.unstakeRequests(alice);
+
+        // Warp to unlock time
+        vm.warp(unlockTime);
+
+        uint256 balBefore = ember.balanceOf(alice);
+        staking.withdraw();
+        assertEq(ember.balanceOf(alice), balBefore + amount);
+        vm.stopPrank();
     }
 }
