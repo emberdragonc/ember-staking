@@ -224,6 +224,22 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
         }
     }
 
+    /// @notice Claim EMBER rewards and immediately restake them (gas-efficient compounding)
+    function claimAndRestakeEmber() external nonReentrant whenNotPaused updateRewards(msg.sender) {
+        address emberToken = address(stakingToken); // EMBER is both stake and reward token
+        uint256 reward = rewardInfo[emberToken].rewards[msg.sender];
+        if (reward == 0) revert ZeroAmount();
+
+        rewardInfo[emberToken].rewards[msg.sender] = 0;
+
+        // Add directly to stake instead of transferring out
+        stakedBalance[msg.sender] += reward;
+        totalStaked += reward;
+
+        emit RewardsClaimed(msg.sender, emberToken, reward);
+        emit Staked(msg.sender, reward);
+    }
+
     // ============ FEE DISTRIBUTION ============
 
     /// @notice Deposit rewards for distribution to stakers
