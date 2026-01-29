@@ -199,14 +199,14 @@ contract RewardVesterTest is Test {
         vm.warp(startTime + VESTING_DURATION / 4);
         vester.release(0);
 
-        (,uint256 released1,,,,,,) = vester.getSchedule(0);
+        (, uint256 released1,,,,,,) = vester.getSchedule(0);
         assertEq(released1, VESTING_AMOUNT / 4);
 
         // Second release at 50%
         vm.warp(startTime + VESTING_DURATION / 2);
         vester.release(0);
 
-        (,uint256 released2,,,,,,) = vester.getSchedule(0);
+        (, uint256 released2,,,,,,) = vester.getSchedule(0);
         assertEq(released2, VESTING_AMOUNT / 2);
 
         // Should have deposited incrementally
@@ -218,7 +218,7 @@ contract RewardVesterTest is Test {
         staking.stake(MIN_STAKE);
 
         uint256 startTime = block.timestamp;
-        
+
         // Create 3 schedules
         vester.createSchedule(VESTING_AMOUNT, startTime, VESTING_DURATION);
         vester.createSchedule(VESTING_AMOUNT * 2, startTime, VESTING_DURATION);
@@ -246,7 +246,7 @@ contract RewardVesterTest is Test {
         staking.stake(MIN_STAKE);
 
         vester.createSchedule(VESTING_AMOUNT, block.timestamp, VESTING_DURATION);
-        
+
         // Warp and release once
         vm.warp(block.timestamp + VESTING_DURATION / 4);
         vester.release(0);
@@ -273,7 +273,7 @@ contract RewardVesterTest is Test {
         assertEq(ember.balanceOf(owner), ownerBalanceBefore + VESTING_AMOUNT);
 
         // Schedule marked inactive
-        (,,,,,,,bool active) = vester.getSchedule(0);
+        (,,,,,,, bool active) = vester.getSchedule(0);
         assertFalse(active);
     }
 
@@ -349,7 +349,7 @@ contract RewardVesterTest is Test {
 
     function test_TotalReleasable() public {
         uint256 startTime = block.timestamp;
-        
+
         vester.createSchedule(VESTING_AMOUNT, startTime, VESTING_DURATION);
         vester.createSchedule(VESTING_AMOUNT * 2, startTime, VESTING_DURATION);
 
@@ -376,7 +376,7 @@ contract RewardVesterTest is Test {
         // Simulate monthly releases
         for (uint256 month = 1; month <= 12; month++) {
             vm.warp(startTime + (month * 30 days));
-            
+
             // Keeper calls release
             vm.prank(keeper);
             try vester.release(0) {} catch {}
@@ -388,7 +388,7 @@ contract RewardVesterTest is Test {
         try vester.release(0) {} catch {}
 
         // All tokens should be released
-        (,uint256 released,,,,,,) = vester.getSchedule(0);
+        (, uint256 released,,,,,,) = vester.getSchedule(0);
         assertEq(released, VESTING_AMOUNT);
 
         // Stakers should have earned proportionally
