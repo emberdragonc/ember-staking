@@ -22,6 +22,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     error InsufficientBalance();
     error TokenNotSupported();
     error CooldownTooLong();
+    error TooManyRewardTokens();
 
     // ============ EVENTS ============
     event Staked(address indexed user, uint256 amount);
@@ -47,6 +48,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
 
     // ============ CONSTANTS ============
     uint256 public constant MAX_COOLDOWN = 30 days; // Max cooldown to prevent lockup abuse
+    uint256 public constant MAX_REWARD_TOKENS = 20; // Prevent unbounded array DoS
 
     // ============ STATE ============
     IERC20 public immutable stakingToken; // EMBER token
@@ -241,10 +243,11 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
 
     // ============ ADMIN FUNCTIONS ============
 
-    /// @notice Add a new reward token
+    /// @notice Add a new reward token (max 20 to prevent DoS)
     function addRewardToken(address token) external onlyOwner {
         if (token == address(0)) revert ZeroAddress();
         if (isRewardToken[token]) return; // Already added
+        if (rewardTokens.length >= MAX_REWARD_TOKENS) revert TooManyRewardTokens();
 
         rewardTokens.push(token);
         isRewardToken[token] = true;

@@ -59,6 +59,15 @@ export default function StakingPage() {
         </div>
       </nav>
 
+      {/* Coming Soon Banner */}
+      <div className="bg-gradient-to-r from-orange-600/20 to-red-600/20 border-y border-orange-500/30">
+        <div className="max-w-6xl mx-auto px-4 py-3 text-center">
+          <span className="text-orange-400 font-medium">🚧 Coming Soon</span>
+          <span className="text-zinc-400 mx-2">—</span>
+          <span className="text-zinc-300">Staking is currently on testnet only. Mainnet launch coming soon!</span>
+        </div>
+      </div>
+
       {/* Header */}
       <section className="py-12 px-4 text-center">
         <h1 className="text-4xl font-bold text-white mb-2">
@@ -72,9 +81,11 @@ export default function StakingPage() {
       {/* Staking Content */}
       <section className="max-w-4xl mx-auto px-4 pb-16">
         {!isConnected ? (
-          <div className="text-center py-16 bg-zinc-900/30 border border-zinc-800 rounded-2xl">
+          <div className="text-center py-16 bg-zinc-900/30 border border-zinc-800 rounded-2xl flex flex-col items-center justify-center">
             <p className="text-zinc-400 mb-6">Connect your wallet to start staking</p>
-            <ConnectButton />
+            <div className="flex justify-center">
+              <ConnectButton />
+            </div>
           </div>
         ) : (
           <div className="grid md:grid-cols-2 gap-6">
