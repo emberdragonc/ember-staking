@@ -204,6 +204,48 @@ contract EmberStakingTest is Test {
         assertEq(staking.earned(alice, address(weth)), 0);
     }
 
+    function test_ClaimAndRestakeEmber() public {
+        // Alice stakes 1M EMBER
+        vm.prank(alice);
+        staking.stake(MIN_STAKE);
+
+        // Deposit EMBER as rewards (compound scenario)
+        ember.mint(address(this), 100_000 ether); // 100k EMBER rewards
+        ember.approve(address(staking), 100_000 ether);
+        staking.depositRewards(address(ember), 100_000 ether);
+
+        // Verify earned rewards
+        uint256 earnedBefore = staking.earned(alice, address(ember));
+        assertEq(earnedBefore, 100_000 ether);
+
+        uint256 stakedBefore = staking.stakedBalance(alice);
+        uint256 totalStakedBefore = staking.totalStaked();
+
+        // Claim and restake in one tx
+        vm.prank(alice);
+        staking.claimAndRestakeEmber();
+
+        // Staked balance should increase by rewards
+        assertEq(staking.stakedBalance(alice), stakedBefore + earnedBefore);
+        assertEq(staking.totalStaked(), totalStakedBefore + earnedBefore);
+
+        // Rewards should be zeroed
+        assertEq(staking.earned(alice, address(ember)), 0);
+
+        // Token balance unchanged (no transfer out)
+        assertEq(ember.balanceOf(alice), INITIAL_BALANCE - MIN_STAKE);
+    }
+
+    function test_RevertClaimAndRestakeEmberZeroRewards() public {
+        // Alice stakes but has no EMBER rewards
+        vm.prank(alice);
+        staking.stake(MIN_STAKE);
+
+        vm.prank(alice);
+        vm.expectRevert(EmberStaking.ZeroAmount.selector);
+        staking.claimAndRestakeEmber();
+    }
+
     // ============ ADMIN TESTS ============
 
     function test_SetCooldownPeriod() public {
