@@ -23,6 +23,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     error TokenNotSupported();
     error CooldownTooLong();
     error TooManyRewardTokens();
+    error StakeBelowMinimum();
 
     // ============ EVENTS ============
     event Staked(address indexed user, uint256 amount);
@@ -31,6 +32,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     event RewardsClaimed(address indexed user, address indexed token, uint256 amount);
     event RewardsDeposited(address indexed token, uint256 amount);
     event RewardTokenAdded(address indexed token);
+    event RewardTokenDeprecated(address indexed token);
     event CooldownUpdated(uint256 oldCooldown, uint256 newCooldown);
 
     // ============ STRUCTS ============
@@ -41,7 +43,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
 
     struct RewardInfo {
         uint256 rewardPerTokenStored;
-        uint256 lastUpdateTime;
+        uint256 lastUpdateTime; // Note: Kept for potential duration-based rewards in v2
         mapping(address => uint256) userRewardPerTokenPaid;
         mapping(address => uint256) rewards;
     }
@@ -49,6 +51,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     // ============ CONSTANTS ============
     uint256 public constant MAX_COOLDOWN = 30 days; // Max cooldown to prevent lockup abuse
     uint256 public constant MAX_REWARD_TOKENS = 20; // Prevent unbounded array DoS
+    uint256 public constant MIN_STAKE = 1_000_000 * 1e18; // 1M EMBER minimum (~$8.63) to prevent dust spam
 
     // ============ STATE ============
     IERC20 public immutable stakingToken; // EMBER token
@@ -127,10 +130,15 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
 
     /// @notice Stake EMBER tokens
     /// @param amount Amount of EMBER to stake
+    /// @dev Minimum stake is 1M EMBER to prevent dust spam
     function stake(uint256 amount) external nonReentrant whenNotPaused updateRewards(msg.sender) {
         if (amount == 0) revert ZeroAmount();
+        
+        // Check minimum stake (either new stake meets minimum, or adding to existing position)
+        uint256 newBalance = stakedBalance[msg.sender] + amount;
+        if (newBalance < MIN_STAKE) revert StakeBelowMinimum();
 
-        stakedBalance[msg.sender] += amount;
+        stakedBalance[msg.sender] = newBalance;
         totalStaked += amount;
 
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
@@ -254,6 +262,14 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
         rewardInfo[token].lastUpdateTime = block.timestamp;
 
         emit RewardTokenAdded(token);
+    }
+
+    /// @notice Deprecate a reward token (disables new deposits, existing claims still work)
+    /// @dev Token remains in array for historical claims but new deposits will fail
+    function deprecateRewardToken(address token) external onlyOwner {
+        if (!isRewardToken[token]) revert TokenNotSupported();
+        isRewardToken[token] = false;
+        emit RewardTokenDeprecated(token);
     }
 
     /// @notice Update cooldown period (max 30 days to prevent lockup abuse)

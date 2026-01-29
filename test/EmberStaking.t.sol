@@ -22,7 +22,8 @@ contract EmberStakingTest is Test {
     address public alice = address(0x1);
     address public bob = address(0x2);
 
-    uint256 constant INITIAL_BALANCE = 1000 ether;
+    uint256 constant INITIAL_BALANCE = 10_000_000 ether; // 10M EMBER
+    uint256 constant MIN_STAKE = 1_000_000 ether; // 1M EMBER minimum
 
     function setUp() public {
         // Deploy tokens
@@ -51,7 +52,7 @@ contract EmberStakingTest is Test {
     // ============ STAKING TESTS ============
 
     function test_Stake() public {
-        uint256 amount = 100 ether;
+        uint256 amount = MIN_STAKE;
 
         vm.prank(alice);
         staking.stake(amount);
@@ -63,23 +64,29 @@ contract EmberStakingTest is Test {
 
     function test_StakeMultipleUsers() public {
         vm.prank(alice);
-        staking.stake(100 ether);
+        staking.stake(MIN_STAKE);
 
         vm.prank(bob);
-        staking.stake(200 ether);
+        staking.stake(2 * MIN_STAKE);
 
-        assertEq(staking.totalStaked(), 300 ether);
-        assertEq(staking.stakedBalance(alice), 100 ether);
-        assertEq(staking.stakedBalance(bob), 200 ether);
+        assertEq(staking.totalStaked(), 3 * MIN_STAKE);
+        assertEq(staking.stakedBalance(alice), MIN_STAKE);
+        assertEq(staking.stakedBalance(bob), 2 * MIN_STAKE);
     }
 
     function testFuzz_Stake(uint256 amount) public {
-        vm.assume(amount > 0 && amount <= INITIAL_BALANCE);
+        vm.assume(amount >= MIN_STAKE && amount <= INITIAL_BALANCE);
 
         vm.prank(alice);
         staking.stake(amount);
 
         assertEq(staking.stakedBalance(alice), amount);
+    }
+    
+    function test_RevertStakeBelowMinimum() public {
+        vm.prank(alice);
+        vm.expectRevert(EmberStaking.StakeBelowMinimum.selector);
+        staking.stake(MIN_STAKE - 1);
     }
 
     function test_RevertStakeZero() public {
@@ -92,23 +99,23 @@ contract EmberStakingTest is Test {
 
     function test_RequestUnstake() public {
         vm.prank(alice);
-        staking.stake(100 ether);
+        staking.stake(2 * MIN_STAKE);
 
         vm.prank(alice);
-        staking.requestUnstake(50 ether);
+        staking.requestUnstake(MIN_STAKE);
 
-        assertEq(staking.stakedBalance(alice), 50 ether);
-        assertEq(staking.totalStaked(), 50 ether);
+        assertEq(staking.stakedBalance(alice), MIN_STAKE);
+        assertEq(staking.totalStaked(), MIN_STAKE);
 
         (uint256 amount, uint256 unlockTime) = staking.unstakeRequests(alice);
-        assertEq(amount, 50 ether);
+        assertEq(amount, MIN_STAKE);
         assertEq(unlockTime, block.timestamp + 3 days);
     }
 
     function test_WithdrawAfterCooldown() public {
         vm.startPrank(alice);
-        staking.stake(100 ether);
-        staking.requestUnstake(100 ether);
+        staking.stake(MIN_STAKE);
+        staking.requestUnstake(MIN_STAKE);
         vm.stopPrank();
 
         // Fast forward past cooldown
@@ -119,13 +126,13 @@ contract EmberStakingTest is Test {
         vm.prank(alice);
         staking.withdraw();
 
-        assertEq(ember.balanceOf(alice), balanceBefore + 100 ether);
+        assertEq(ember.balanceOf(alice), balanceBefore + MIN_STAKE);
     }
 
     function test_RevertWithdrawBeforeCooldown() public {
         vm.startPrank(alice);
-        staking.stake(100 ether);
-        staking.requestUnstake(100 ether);
+        staking.stake(MIN_STAKE);
+        staking.requestUnstake(MIN_STAKE);
 
         vm.expectRevert(EmberStaking.CooldownNotComplete.selector);
         staking.withdraw();
@@ -134,15 +141,15 @@ contract EmberStakingTest is Test {
 
     function test_CancelUnstake() public {
         vm.startPrank(alice);
-        staking.stake(100 ether);
-        staking.requestUnstake(50 ether);
+        staking.stake(2 * MIN_STAKE);
+        staking.requestUnstake(MIN_STAKE);
 
-        assertEq(staking.stakedBalance(alice), 50 ether);
+        assertEq(staking.stakedBalance(alice), MIN_STAKE);
 
         staking.cancelUnstake();
 
-        assertEq(staking.stakedBalance(alice), 100 ether);
-        assertEq(staking.totalStaked(), 100 ether);
+        assertEq(staking.stakedBalance(alice), 2 * MIN_STAKE);
+        assertEq(staking.totalStaked(), 2 * MIN_STAKE);
         vm.stopPrank();
     }
 
@@ -151,7 +158,7 @@ contract EmberStakingTest is Test {
     function test_DepositRewards() public {
         // Setup: Alice stakes
         vm.prank(alice);
-        staking.stake(100 ether);
+        staking.stake(MIN_STAKE);
 
         // Deposit WETH rewards
         weth.mint(address(this), 10 ether);
@@ -163,12 +170,12 @@ contract EmberStakingTest is Test {
     }
 
     function test_RewardsDistributionProportional() public {
-        // Alice stakes 100, Bob stakes 200 (1:2 ratio)
+        // Alice stakes 1M, Bob stakes 2M (1:2 ratio)
         vm.prank(alice);
-        staking.stake(100 ether);
+        staking.stake(MIN_STAKE);
 
         vm.prank(bob);
-        staking.stake(200 ether);
+        staking.stake(2 * MIN_STAKE);
 
         // Deposit 30 WETH rewards
         weth.mint(address(this), 30 ether);
@@ -182,7 +189,7 @@ contract EmberStakingTest is Test {
 
     function test_ClaimRewards() public {
         vm.prank(alice);
-        staking.stake(100 ether);
+        staking.stake(MIN_STAKE);
 
         weth.mint(address(this), 10 ether);
         weth.approve(address(staking), 10 ether);
@@ -219,7 +226,7 @@ contract EmberStakingTest is Test {
 
         vm.prank(alice);
         vm.expectRevert();
-        staking.stake(100 ether);
+        staking.stake(MIN_STAKE);
     }
 
     function test_Unpause() public {
@@ -227,8 +234,24 @@ contract EmberStakingTest is Test {
         staking.unpause();
 
         vm.prank(alice);
-        staking.stake(100 ether);
+        staking.stake(MIN_STAKE);
 
-        assertEq(staking.stakedBalance(alice), 100 ether);
+        assertEq(staking.stakedBalance(alice), MIN_STAKE);
+    }
+    
+    // ============ NEW SECURITY TESTS ============
+    
+    function test_DeprecateRewardToken() public {
+        // Deprecate WETH
+        staking.deprecateRewardToken(address(weth));
+        
+        // Should no longer be active
+        assertFalse(staking.isRewardToken(address(weth)));
+        
+        // Deposits should fail now
+        weth.mint(address(this), 10 ether);
+        weth.approve(address(staking), 10 ether);
+        vm.expectRevert(EmberStaking.TokenNotSupported.selector);
+        staking.depositRewards(address(weth), 10 ether);
     }
 }
