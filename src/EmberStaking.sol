@@ -35,6 +35,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     event RewardTokenAdded(address indexed token);
     event RewardTokenDeprecated(address indexed token);
     event CooldownUpdated(uint256 oldCooldown, uint256 newCooldown);
+    event RewardClaimFailed(address indexed user, address indexed token, uint256 amount);
 
     // ============ STRUCTS ============
     struct UnstakeRequest {
@@ -232,6 +233,7 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
     // ============ REWARDS FUNCTIONS ============
 
     /// @notice Claim all pending rewards
+    /// @dev M-1 Fix: Uses try/catch to prevent one failing token from blocking all claims
     function claimRewards() external nonReentrant updateRewards(msg.sender) {
         for (uint256 i = 0; i < rewardTokens.length; i++) {
             address token = rewardTokens[i];
@@ -241,8 +243,22 @@ contract EmberStaking is Ownable, ReentrancyGuard, Pausable {
                 rewardInfo[token].rewards[msg.sender] = 0;
                 // H-1: Decrease total owed for this token
                 totalOwedRewards[token] -= reward;
-                IERC20(token).safeTransfer(msg.sender, reward);
-                emit RewardsClaimed(msg.sender, token, reward);
+                // M-1: Try/catch to prevent one bad token from blocking all claims
+                try IERC20(token).transfer(msg.sender, reward) returns (bool success) {
+                    if (success) {
+                        emit RewardsClaimed(msg.sender, token, reward);
+                    } else {
+                        // Transfer returned false, revert state
+                        rewardInfo[token].rewards[msg.sender] = reward;
+                        totalOwedRewards[token] += reward;
+                        emit RewardClaimFailed(msg.sender, token, reward);
+                    }
+                } catch {
+                    // Transfer reverted, revert state
+                    rewardInfo[token].rewards[msg.sender] = reward;
+                    totalOwedRewards[token] += reward;
+                    emit RewardClaimFailed(msg.sender, token, reward);
+                }
             }
         }
     }
