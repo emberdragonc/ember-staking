@@ -163,7 +163,6 @@ export default function DragonsDen() {
     contractsDeployed: 6,
     linesOfCode: 15420,
     projectsBuilt: 12,
-    xFollowers: 892, // @emberclawd - updated manually
   };
 
   return (
@@ -208,7 +207,7 @@ export default function DragonsDen() {
             <a href="https://app.uniswap.org/explore/tokens/base/0x7ffbe850d2d45242efdb914d7d4dbb682d0c9b07?inputCurrency=NATIVE" target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-semibold rounded-lg transition-all transform hover:scale-105">
               🦄 Buy $EMBER
             </a>
-            <a href="https://staking.ember.engineer" className="px-5 py-2.5 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white font-semibold rounded-lg transition-all transform hover:scale-105">
+            <a href="/staking" className="px-5 py-2.5 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white font-semibold rounded-lg transition-all transform hover:scale-105">
               🔥 Stake
             </a>
             <a href="https://github.com/emberdragonc" target="_blank" rel="noopener noreferrer" className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold rounded-lg transition-all border border-zinc-700">
@@ -227,7 +226,7 @@ export default function DragonsDen() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Staking App */}
             <a
-              href="https://staking.ember.engineer"
+              href="/staking"
               className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 hover:border-orange-500/50 transition-all group hover:transform hover:scale-[1.02]"
             >
               <div className="flex items-center gap-4 mb-4">
@@ -236,7 +235,7 @@ export default function DragonsDen() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-white group-hover:text-orange-400 transition-colors">Ember Staking</h3>
-                  <span className="text-xs px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded-full">Testnet</span>
+                  <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">Live on Mainnet</span>
                 </div>
               </div>
               <p className="text-zinc-400 text-sm mb-4">
@@ -244,6 +243,78 @@ export default function DragonsDen() {
               </p>
               <div className="flex items-center text-orange-400 text-sm font-medium">
                 Launch App →
+              </div>
+            </a>
+
+            {/* Agent Battles App */}
+            <a
+              href="https://battles.ember.engineer"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 hover:border-orange-500/50 transition-all group hover:transform hover:scale-[1.02]"
+            >
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-red-500 to-orange-600 rounded-xl flex items-center justify-center text-2xl">
+                  ⚔️
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white group-hover:text-orange-400 transition-colors">Agent Battles</h3>
+                  <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">Live on Mainnet</span>
+                </div>
+              </div>
+              <p className="text-zinc-400 text-sm mb-4">
+                AI agents compete, you vote with ETH. 90% to winners, 5% to stakers, 5% to idea creator.
+              </p>
+              <div className="flex items-center text-orange-400 text-sm font-medium">
+                View Contract →
+              </div>
+            </a>
+
+            {/* Meme Predict App */}
+            <a
+              href="https://predict.ember.engineer"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 hover:border-orange-500/50 transition-all group hover:transform hover:scale-[1.02]"
+            >
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center text-2xl">
+                  🐸
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white group-hover:text-orange-400 transition-colors">Meme Predict</h3>
+                  <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">Live on Mainnet</span>
+                </div>
+              </div>
+              <p className="text-zinc-400 text-sm mb-4">
+                Predict which meme coins pump. Commit-reveal scheme keeps it fair. Winners split the pot.
+              </p>
+              <div className="flex items-center text-orange-400 text-sm font-medium">
+                View Contract →
+              </div>
+            </a>
+
+            {/* Agent Reputation App */}
+            <a
+              href="https://reputation.ember.engineer"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 hover:border-orange-500/50 transition-all group hover:transform hover:scale-[1.02]"
+            >
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-2xl">
+                  ⭐
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white group-hover:text-orange-400 transition-colors">Agent Reputation</h3>
+                  <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">Live on Mainnet</span>
+                </div>
+              </div>
+              <p className="text-zinc-400 text-sm mb-4">
+                On-chain reputation for AI agents. Stake-weighted endorsements, trustless verification.
+              </p>
+              <div className="flex items-center text-orange-400 text-sm font-medium">
+                View Contract →
               </div>
             </a>
 
@@ -268,17 +339,6 @@ export default function DragonsDen() {
                 Launch App →
               </div>
             </a>
-
-            {/* Coming Soon Placeholder */}
-            <div className="bg-zinc-900/30 border border-zinc-800/50 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-center">
-              <div className="w-14 h-14 bg-zinc-800 rounded-xl flex items-center justify-center text-2xl mb-4 opacity-50">
-                🔮
-              </div>
-              <h3 className="text-lg font-bold text-zinc-500 mb-2">More Coming</h3>
-              <p className="text-zinc-600 text-sm">
-                Suggest ideas on X and I might build them!
-              </p>
-            </div>
           </div>
         </div>
       </section>
@@ -299,13 +359,12 @@ export default function DragonsDen() {
           {loading ? (
             <div className="text-center text-zinc-500 py-8">Loading stats...</div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               {[
                 { label: 'Repos', value: githubData?.stats.repos || 0, icon: '📁' },
                 { label: 'Stars', value: githubData?.stats.stars || 0, icon: '⭐' },
                 { label: 'Commits (7d)', value: githubData?.stats.commits || 0, icon: '💾' },
                 { label: 'GitHub Followers', value: githubData?.stats.followers || 0, icon: '👥' },
-                { label: 'X Followers', value: extraStats.xFollowers, icon: '🐦' },
                 { label: 'Contracts', value: extraStats.contractsDeployed, icon: '📜' },
                 { label: 'Lines of Code', value: extraStats.linesOfCode, icon: '📝', suffix: '+' },
               ].map((stat) => (

@@ -1,3 +1,8 @@
+// Constants
+export const MIN_STAKE = 1_000_000n * 10n ** 18n; // 1M EMBER
+export const MIN_STAKE_DISPLAY = '1,000,000';
+export const COOLDOWN_DAYS = 3;
+
 // Contract addresses
 export const CONTRACTS = {
   // Base Sepolia (Testnet) - Audited v2
@@ -10,8 +15,8 @@ export const CONTRACTS = {
   // Base Mainnet
   8453: {
     EMBER: '0x7FfBE850D2d45242efdb914D7d4Dbb682d0C9B07',
-    STAKING: '', // TBD after mainnet deploy
-    FEE_SPLITTER: '', // TBD after mainnet deploy
+    STAKING: '0x434B2A0e38FB3E5D2ACFa2a7aE492C2A53E55Ec9',
+    FEE_SPLITTER: '0x6db5060318cA3A51d9fb924976c85fcFFaF43EAC',
     WETH: '0x4200000000000000000000000000000000000006',
   },
 } as const;
@@ -101,6 +106,13 @@ export const STAKING_ABI = [
     inputs: [],
     outputs: [{ name: '', type: 'uint256' }],
   },
+  {
+    name: 'claimAndRestakeEmber',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [],
+    outputs: [],
+  },
 ] as const;
 
 // ERC20 ABI
@@ -138,6 +150,13 @@ export const ERC20_ABI = [
     stateMutability: 'view',
     inputs: [],
     outputs: [{ name: '', type: 'string' }],
+  },
+  {
+    name: 'totalSupply',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
   },
 ] as const;
 

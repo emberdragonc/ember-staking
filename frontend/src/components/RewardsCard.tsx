@@ -29,14 +29,17 @@ export function RewardsCard() {
   
   // Write functions
   const { writeContract: claimStakerRewards, data: claimStakerHash, isPending: isClaimingStaker } = useWriteContract();
+  const { writeContract: claimAndRestake, data: restakeHash, isPending: isRestaking } = useWriteContract();
   const { writeContract: claimContributorRewards, data: claimContributorHash, isPending: isClaimingContributor } = useWriteContract();
   
   // Wait for transactions
   const { isSuccess: isClaimStakerSuccess } = useWaitForTransactionReceipt({ hash: claimStakerHash });
+  const { isSuccess: isRestakeSuccess } = useWaitForTransactionReceipt({ hash: restakeHash });
   const { isSuccess: isClaimContributorSuccess } = useWaitForTransactionReceipt({ hash: claimContributorHash });
   
   // Refetch on success
   if (isClaimStakerSuccess) refetchEarned();
+  if (isRestakeSuccess) refetchEarned();
   if (isClaimContributorSuccess) refetchContributor();
   
   const handleClaimStakerRewards = () => {
@@ -45,6 +48,15 @@ export function RewardsCard() {
       address: contracts.STAKING as `0x${string}`,
       abi: STAKING_ABI,
       functionName: 'claimRewards',
+    });
+  };
+  
+  const handleClaimAndRestake = () => {
+    if (!contracts?.STAKING) return;
+    claimAndRestake({
+      address: contracts.STAKING as `0x${string}`,
+      abi: STAKING_ABI,
+      functionName: 'claimAndRestakeEmber',
     });
   };
   
@@ -70,6 +82,9 @@ export function RewardsCard() {
   
   const hasStakerRewards = stakerRewards.amounts.some(a => a > 0n);
   const hasContributorRewards = contributorRewards.amounts.some(a => a > 0n);
+  const hasEmberRewards = stakerRewards.tokens.some((token, i) => 
+    contracts && token.toLowerCase() === contracts.EMBER.toLowerCase() && stakerRewards.amounts[i] > 0n
+  );
   
   const getTokenSymbol = (tokenAddress: string) => {
     if (!contracts) return 'TOKEN';
@@ -108,13 +123,25 @@ export function RewardsCard() {
           </div>
         )}
         
-        <button
-          onClick={handleClaimStakerRewards}
-          disabled={!hasStakerRewards || isClaimingStaker}
-          className="w-full bg-green-600 hover:bg-green-700 disabled:bg-zinc-700 text-white font-bold py-3 rounded-xl transition-colors"
-        >
-          {isClaimingStaker ? 'Claiming...' : 'Claim Staker Rewards'}
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={handleClaimStakerRewards}
+            disabled={!hasStakerRewards || isClaimingStaker}
+            className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-zinc-700 text-white font-bold py-3 rounded-xl transition-colors"
+          >
+            {isClaimingStaker ? 'Claiming...' : 'Claim All'}
+          </button>
+          <button
+            onClick={handleClaimAndRestake}
+            disabled={!hasEmberRewards || isRestaking}
+            className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:bg-zinc-700 disabled:from-zinc-700 disabled:to-zinc-700 text-white font-bold py-3 rounded-xl transition-colors"
+          >
+            {isRestaking ? 'Compounding...' : '🔄 Compound EMBER'}
+          </button>
+        </div>
+        <p className="text-zinc-500 text-xs mt-2 text-center">
+          Compound: Claims EMBER rewards and auto-restakes them
+        </p>
       </div>
       
       {/* Contributor Rewards */}

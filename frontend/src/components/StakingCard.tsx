@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { parseEther, formatEther } from 'viem';
+import { useState, useEffect } from 'react';
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt, useWalletClient } from 'wagmi';
+import { parseEther, formatEther, encodeFunctionData } from 'viem';
 import { CONTRACTS, STAKING_ABI, ERC20_ABI } from '@/config/contracts';
 
 export function StakingCard() {
@@ -60,6 +60,14 @@ export function StakingCard() {
     query: { enabled: !!address && !!contracts?.STAKING && !!contracts?.EMBER },
   });
   
+  // Get total supply for percentage calculation
+  const { data: totalSupply } = useReadContract({
+    address: contracts?.EMBER as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'totalSupply',
+    query: { enabled: !!contracts?.EMBER },
+  });
+  
   // Write functions
   const { writeContract: approve, data: approveHash, isPending: isApproving } = useWriteContract();
   const { writeContract: stake, data: stakeHash, isPending: isStaking } = useWriteContract();
@@ -75,25 +83,154 @@ export function StakingCard() {
   if (isApproveSuccess) refetchAllowance();
   if (isStakeSuccess) refetchStaked();
   
+  const [error, setError] = useState<string | null>(null);
+  const [supportsBatching, setSupportsBatching] = useState(false);
+  const [isBatchStaking, setIsBatchStaking] = useState(false);
+  
+  // Get wallet client for EIP-7702 batching
+  const { data: walletClient } = useWalletClient();
+  
+  // Check for EIP-5792 batching support (smart wallets like Coinbase, Ambire)
+  useEffect(() => {
+    async function checkBatchingSupport() {
+      if (!walletClient || !chainId || !address) {
+        setSupportsBatching(false);
+        return;
+      }
+      
+      try {
+        console.log('[7702] Checking wallet capabilities...');
+        const capabilities = await walletClient.request({
+          method: 'wallet_getCapabilities' as any,
+          params: [address],
+        }) as Record<string, { atomicBatch?: { supported: boolean } }>;
+        
+        const chainCapabilities = capabilities?.[`0x${chainId.toString(16)}`] || capabilities?.[chainId.toString()];
+        const batchSupported = chainCapabilities?.atomicBatch?.supported === true;
+        
+        console.log('[7702] Capabilities:', capabilities);
+        console.log('[7702] Batching supported:', batchSupported);
+        
+        setSupportsBatching(batchSupported);
+      } catch (err) {
+        // wallet_getCapabilities not supported = EOA wallet
+        console.log('[7702] wallet_getCapabilities not supported (EOA wallet)');
+        setSupportsBatching(false);
+      }
+    }
+    
+    checkBatchingSupport();
+  }, [walletClient, chainId, address]);
+  
+  // EIP-7702 Batch Stake (approve + stake in one tx)
+  const handleBatchStake = async () => {
+    if (!contracts?.EMBER || !contracts?.STAKING || !stakeAmount || !walletClient || !chainId) return;
+    setError(null);
+    setIsBatchStaking(true);
+    
+    try {
+      const stakeAmountWei = parseEther(stakeAmount);
+      
+      // Encode approve calldata
+      const approveData = encodeFunctionData({
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [contracts.STAKING as `0x${string}`, stakeAmountWei],
+      });
+      
+      // Encode stake calldata
+      const stakeData = encodeFunctionData({
+        abi: STAKING_ABI,
+        functionName: 'stake',
+        args: [stakeAmountWei],
+      });
+      
+      console.log('[7702] Sending batched approve + stake...');
+      
+      // Use wallet_sendCalls for atomic batch
+      const result = await walletClient.request({
+        method: 'wallet_sendCalls' as any,
+        params: [{
+          version: '1.0',
+          chainId: `0x${chainId.toString(16)}`,
+          from: address,
+          calls: [
+            { to: contracts.EMBER, data: approveData },
+            { to: contracts.STAKING, data: stakeData },
+          ],
+        }],
+      });
+      
+      console.log('[7702] Batch tx result:', result);
+      setStakeAmount('');
+      refetchAllowance();
+      refetchStaked();
+    } catch (err: any) {
+      console.error('[7702] Batch stake error:', err);
+      if (err.message?.includes('rejected') || err.message?.includes('denied')) {
+        setError('Transaction rejected by user');
+      } else {
+        setError('Batch stake failed: ' + (err.shortMessage || err.message || 'Unknown error'));
+      }
+    } finally {
+      setIsBatchStaking(false);
+    }
+  };
+  
   const handleApprove = () => {
-    if (!contracts?.EMBER || !contracts?.STAKING) return;
+    if (!contracts?.EMBER || !contracts?.STAKING || !stakeAmount) return;
+    setError(null);
+    
+    console.log('[Approve] Starting approval for', stakeAmount, 'EMBER');
+    
+    // Approve exact amount (not infinite)
+    const approvalAmount = parseEther(stakeAmount);
+    
     approve({
       address: contracts.EMBER as `0x${string}`,
       abi: ERC20_ABI,
       functionName: 'approve',
-      args: [contracts.STAKING as `0x${string}`, parseEther('1000000000')],
+      args: [contracts.STAKING as `0x${string}`, approvalAmount],
+    }, {
+      onError: (err) => {
+        console.error('[Approve] Error:', err);
+        setError(err.message?.includes('rejected') ? 'Transaction rejected by user' : 'Approval failed. Please try again.');
+      },
+      onSuccess: (hash) => {
+        console.log('[Approve] Success, tx hash:', hash);
+      }
     });
   };
   
   const handleStake = () => {
     if (!contracts?.STAKING || !stakeAmount) return;
+    setError(null);
+    
+    console.log('[Stake] Starting stake for', stakeAmount, 'EMBER');
+    
     stake({
       address: contracts.STAKING as `0x${string}`,
       abi: STAKING_ABI,
       functionName: 'stake',
       args: [parseEther(stakeAmount)],
+    }, {
+      onError: (err) => {
+        console.error('[Stake] Error:', err);
+        if (err.message?.includes('rejected')) {
+          setError('Transaction rejected by user');
+        } else if (err.message?.includes('insufficient')) {
+          setError('Insufficient EMBER balance');
+        } else if (err.message?.includes('allowance')) {
+          setError('Approval needed. Please approve first.');
+        } else {
+          setError('Staking failed: ' + ((err as any).shortMessage || err.message || 'Unknown error'));
+        }
+      },
+      onSuccess: (hash) => {
+        console.log('[Stake] Success, tx hash:', hash);
+        setStakeAmount('');
+      },
     });
-    setStakeAmount('');
   };
   
   const handleRequestUnstake = () => {
@@ -143,17 +280,45 @@ export function StakingCard() {
       <h2 className="text-2xl font-bold text-white mb-6">🐉 Stake EMBER</h2>
       
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div className="bg-zinc-800 rounded-xl p-4">
-          <p className="text-zinc-400 text-sm">Your Staked</p>
-          <p className="text-2xl font-bold text-white">
-            {stakedBalance ? formatEther(stakedBalance) : '0'} EMBER
+      <div className="flex flex-col gap-3 mb-6">
+        <div className="bg-zinc-800 rounded-xl p-4 flex justify-between items-center">
+          <div>
+            <p className="text-zinc-400 text-sm">Your Position</p>
+            <p className="text-zinc-500 text-xs">EMBER staked</p>
+          </div>
+          <p className="text-xl font-bold text-white">
+            {stakedBalance ? Number(formatEther(stakedBalance)).toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0'}
           </p>
         </div>
-        <div className="bg-zinc-800 rounded-xl p-4">
-          <p className="text-zinc-400 text-sm">Total Staked</p>
-          <p className="text-2xl font-bold text-white">
-            {totalStaked ? formatEther(totalStaked) : '0'} EMBER
+        <div className="bg-zinc-800 rounded-xl p-4 flex justify-between items-center">
+          <div>
+            <p className="text-zinc-400 text-sm">Pool Total</p>
+            <p className="text-zinc-500 text-xs">EMBER from all stakers</p>
+          </div>
+          <p className="text-xl font-bold text-white">
+            {totalStaked ? Number(formatEther(totalStaked)).toLocaleString(undefined, { maximumFractionDigits: 0 }) : '0'}
+          </p>
+        </div>
+        <div className="bg-gradient-to-r from-orange-900/50 to-zinc-800 rounded-xl p-4 flex justify-between items-center border border-orange-500/30">
+          <div>
+            <p className="text-zinc-400 text-sm">Your Share</p>
+            <p className="text-zinc-500 text-xs">of fee rewards</p>
+          </div>
+          <p className="text-xl font-bold text-orange-400">
+            {totalStaked && stakedBalance && totalStaked > 0n
+              ? ((Number(stakedBalance) / Number(totalStaked)) * 100).toFixed(2)
+              : '0.00'}%
+          </p>
+        </div>
+        <div className="bg-zinc-800 rounded-xl p-4 flex justify-between items-center">
+          <div>
+            <p className="text-zinc-400 text-sm">Supply Staked</p>
+            <p className="text-zinc-500 text-xs">% of total EMBER</p>
+          </div>
+          <p className="text-xl font-bold text-green-400">
+            {totalStaked && totalSupply && totalSupply > 0n
+              ? ((Number(totalStaked) / Number(totalSupply)) * 100).toFixed(2)
+              : '0.00'}%
           </p>
         </div>
       </div>
@@ -161,13 +326,16 @@ export function StakingCard() {
       {/* Wallet Balance */}
       <div className="mb-6">
         <p className="text-zinc-400 text-sm mb-2">
-          Wallet Balance: {emberBalance ? formatEther(emberBalance) : '0'} EMBER
+          Wallet Balance: {emberBalance ? Number(formatEther(emberBalance)).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '0'} EMBER
         </p>
       </div>
       
       {/* Stake Section */}
       <div className="mb-6">
-        <label className="text-zinc-400 text-sm mb-2 block">Stake Amount</label>
+        <div className="flex justify-between items-center mb-2">
+          <label className="text-zinc-400 text-sm">Stake Amount</label>
+          <span className="text-zinc-500 text-xs">Min: 1,000,000 EMBER</span>
+        </div>
         <div className="flex gap-2">
           <input
             type="number"
@@ -177,28 +345,67 @@ export function StakingCard() {
             className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-orange-500"
           />
           <button
+            onClick={() => setStakeAmount('1000000')}
+            className="px-3 py-2 bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 text-sm"
+          >
+            MIN
+          </button>
+          <button
             onClick={() => setStakeAmount(emberBalance ? formatEther(emberBalance) : '0')}
-            className="px-4 py-2 bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700"
+            className="px-3 py-2 bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 text-sm"
           >
             MAX
           </button>
         </div>
         
-        {needsApproval ? (
+        {/* Error display */}
+        {error && (
+          <div className="mt-3 p-3 bg-red-900/50 border border-red-500/50 rounded-xl text-red-300 text-sm">
+            ⚠️ {error}
+          </div>
+        )}
+        
+        {/* Wallet prompt */}
+        {(isApproving || isStaking || isBatchStaking) && (
+          <div className="mt-3 p-3 bg-blue-900/50 border border-blue-500/50 rounded-xl text-blue-300 text-sm animate-pulse">
+            👛 Please confirm in your wallet...
+          </div>
+        )}
+        
+        {/* Smart wallet batching indicator */}
+        {supportsBatching && needsApproval && (
+          <div className="mt-3 p-2 bg-green-900/30 border border-green-500/30 rounded-xl text-green-300 text-xs">
+            ✨ Smart wallet detected - approve & stake in one transaction!
+          </div>
+        )}
+        
+        {/* Stake buttons */}
+        {supportsBatching && needsApproval ? (
+          // Smart wallet: single batch button
+          <button
+            onClick={handleBatchStake}
+            disabled={isBatchStaking || !stakeAmount}
+            className="w-full mt-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 disabled:from-zinc-700 disabled:to-zinc-700 text-white font-bold py-3 rounded-xl transition-colors"
+          >
+            {isBatchStaking ? '👛 Check Wallet...' : '⚡ Approve & Stake (1 tx)'}
+          </button>
+        ) : needsApproval ? (
+          // EOA wallet: two-step approval
           <button
             onClick={handleApprove}
-            disabled={isApproving || isApproveLoading}
+            disabled={isApproving || isApproveLoading || !stakeAmount}
             className="w-full mt-3 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-700 text-white font-bold py-3 rounded-xl transition-colors"
           >
-            {isApproving || isApproveLoading ? 'Approving...' : 'Approve EMBER'}
+            {isApproving ? '👛 Check Wallet...' : isApproveLoading ? 'Confirming...' : 'Step 1: Approve EMBER'}
           </button>
         ) : (
+          // Already approved: stake button
           <button
             onClick={handleStake}
             disabled={isStaking || isStakeLoading || !stakeAmount}
             className="w-full mt-3 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-700 text-white font-bold py-3 rounded-xl transition-colors"
           >
-            {isStaking || isStakeLoading ? 'Staking...' : 'Stake'}
+            {isStaking ? '👛 Check Wallet...' : isStakeLoading ? 'Confirming...' : 'Stake'}
           </button>
         )}
       </div>

@@ -2,12 +2,17 @@
 
 import Link from 'next/link';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
+import { useAccount, useSwitchChain } from 'wagmi';
+import { base } from 'wagmi/chains';
 import { StakingCard } from '@/components/StakingCard';
 import { RewardsCard } from '@/components/RewardsCard';
 
 export default function StakingPage() {
-  const { isConnected } = useAccount();
+  const { isConnected, chainId } = useAccount();
+  const { switchChain, isPending: isSwitching } = useSwitchChain();
+  
+  // Check if on correct network (Base mainnet = 8453, Base Sepolia = 84532)
+  const isCorrectNetwork = chainId === 8453 || chainId === 84532;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-black">
@@ -59,12 +64,16 @@ export default function StakingPage() {
         </div>
       </nav>
 
-      {/* Coming Soon Banner */}
-      <div className="bg-gradient-to-r from-orange-600/20 to-red-600/20 border-y border-orange-500/30">
+      {/* Risk Warning Banner */}
+      <div className="bg-gradient-to-r from-amber-600/20 to-orange-600/20 border-y border-amber-500/30">
         <div className="max-w-6xl mx-auto px-4 py-3 text-center">
-          <span className="text-orange-400 font-medium">🚧 Coming Soon</span>
+          <span className="text-amber-400 font-medium">⚠️ Warning</span>
           <span className="text-zinc-400 mx-2">—</span>
-          <span className="text-zinc-300">Staking is currently on testnet only. Mainnet launch coming soon!</span>
+          <span className="text-zinc-300">
+            This contract was written and audited by AI. While built on battle-tested{' '}
+            <a href="https://github.com/Synthetixio/synthetix/blob/develop/contracts/StakingRewards.sol" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline">Synthetix StakingRewards</a>{' '}
+            patterns with OpenZeppelin security primitives, there is always risk of loss. Use at your own risk.
+          </span>
         </div>
       </div>
 
@@ -87,6 +96,22 @@ export default function StakingPage() {
               <ConnectButton />
             </div>
           </div>
+        ) : !isCorrectNetwork ? (
+          <div className="text-center py-16 bg-zinc-900/30 border border-zinc-800 rounded-2xl flex flex-col items-center justify-center">
+            <div className="text-5xl mb-4">🔗</div>
+            <h2 className="text-xl font-bold text-white mb-2">Wrong Network</h2>
+            <p className="text-zinc-400 mb-6">Please switch to Base to use Ember Staking</p>
+            <button
+              onClick={() => switchChain({ chainId: base.id })}
+              disabled={isSwitching}
+              className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:from-zinc-600 disabled:to-zinc-700 text-white font-bold rounded-xl transition-all transform hover:scale-105 disabled:scale-100"
+            >
+              {isSwitching ? '🔄 Switching...' : '🔵 Switch to Base'}
+            </button>
+            <p className="text-zinc-500 text-sm mt-4">
+              Base is a secure, low-cost Ethereum L2
+            </p>
+          </div>
         ) : (
           <div className="grid md:grid-cols-2 gap-6">
             <StakingCard />
@@ -95,11 +120,17 @@ export default function StakingPage() {
         )}
 
         {/* Info Cards */}
-        <div className="mt-8 grid md:grid-cols-3 gap-4">
+        <div className="mt-8 grid md:grid-cols-4 gap-4">
           <div className="bg-zinc-900/30 border border-zinc-800 rounded-xl p-4">
             <h3 className="font-semibold text-white mb-2">📈 How it Works</h3>
             <p className="text-sm text-zinc-400">
               Stake $EMBER to receive 50% of all fees from projects I build and deploy.
+            </p>
+          </div>
+          <div className="bg-zinc-900/30 border border-zinc-800 rounded-xl p-4">
+            <h3 className="font-semibold text-white mb-2">🎫 Minimum Stake</h3>
+            <p className="text-sm text-zinc-400">
+              1,000,000 EMBER minimum to prevent dust spam. Rewards start after 1 hour.
             </p>
           </div>
           <div className="bg-zinc-900/30 border border-zinc-800 rounded-xl p-4">
@@ -118,28 +149,28 @@ export default function StakingPage() {
 
         {/* Contract Info */}
         <div className="mt-8 bg-zinc-900/30 border border-zinc-800 rounded-xl p-4">
-          <h3 className="font-semibold text-white mb-3">📜 Contracts (Base Sepolia)</h3>
+          <h3 className="font-semibold text-white mb-3">📜 Contracts (Base Mainnet)</h3>
           <div className="space-y-2 text-sm font-mono">
             <div className="flex justify-between">
               <span className="text-zinc-500">EmberStaking:</span>
               <a 
-                href="https://sepolia.basescan.org/address/0x4c7392a9122707ca3613b7b75e564ec0fefa3a2c"
+                href="https://basescan.org/address/0x434B2A0e38FB3E5D2ACFa2a7aE492C2A53E55Ec9"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-orange-400 hover:text-orange-300"
               >
-                0x4c73...3a2c
+                0x434B...5Ec9
               </a>
             </div>
             <div className="flex justify-between">
               <span className="text-zinc-500">FeeSplitter:</span>
               <a 
-                href="https://sepolia.basescan.org/address/0x489621a3e62e966dd0839023ad891540f59e421b"
+                href="https://basescan.org/address/0x6db5060318cA3A51d9fb924976c85fcFFaF43EAC"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-orange-400 hover:text-orange-300"
               >
-                0x4896...421b
+                0x6db5...3EAC
               </a>
             </div>
           </div>
