@@ -38,12 +38,21 @@ const connectors = connectorsForWallets(
   }
 );
 
+// Use Alchemy RPC for faster gas estimation (fixes Coinbase Wallet timeouts)
+const alchemyKey = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY;
+const baseRpc = alchemyKey 
+  ? `https://base-mainnet.g.alchemy.com/v2/${alchemyKey}`
+  : 'https://mainnet.base.org';
+const baseSepoliaRpc = alchemyKey
+  ? `https://base-sepolia.g.alchemy.com/v2/${alchemyKey}`
+  : 'https://sepolia.base.org';
+
 const config = createConfig({
   connectors,
   chains: [base, baseSepolia],
   transports: {
-    [base.id]: http(),
-    [baseSepolia.id]: http(),
+    [base.id]: http(baseRpc),
+    [baseSepolia.id]: http(baseSepoliaRpc),
   },
   ssr: true,
 });
