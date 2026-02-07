@@ -88,8 +88,7 @@ contract FeeSplitterTest is Test {
     function test_SetAppFee() public {
         feeSplitter.setAppFee(app1, 30, creator1);
 
-        (uint256 feeBps, address ideaCreator, bool active, string memory appType) = 
-            feeSplitter.getAppFeeConfig(app1);
+        (uint256 feeBps, address ideaCreator, bool active, string memory appType) = feeSplitter.getAppFeeConfig(app1);
 
         assertEq(feeBps, 30, "Fee should be 30 bps");
         assertEq(ideaCreator, creator1, "Creator should be set");
@@ -100,8 +99,7 @@ contract FeeSplitterTest is Test {
     function test_SetAppFeeWithType() public {
         feeSplitter.setAppFeeWithType(app1, 30, creator1, "DEX");
 
-        (uint256 feeBps, address ideaCreator, bool active, string memory appType) = 
-            feeSplitter.getAppFeeConfig(app1);
+        (uint256 feeBps, address ideaCreator, bool active, string memory appType) = feeSplitter.getAppFeeConfig(app1);
 
         assertEq(feeBps, 30, "Fee should be 30 bps");
         assertEq(ideaCreator, creator1, "Creator should be set");
@@ -134,7 +132,7 @@ contract FeeSplitterTest is Test {
         feeSplitter.setAppFee(app1, 30, creator1);
         feeSplitter.updateAppFee(app1, 50);
 
-        (uint256 feeBps, , ,) = feeSplitter.getAppFeeConfig(app1);
+        (uint256 feeBps,,,) = feeSplitter.getAppFeeConfig(app1);
         assertEq(feeBps, 50, "Fee should be updated to 50 bps");
     }
 
@@ -145,7 +143,7 @@ contract FeeSplitterTest is Test {
 
     function test_UpdateAppFee_RevertFeeTooHigh() public {
         feeSplitter.setAppFee(app1, 30, creator1);
-        
+
         vm.expectRevert(FeeSplitter.FeeTooHigh.selector);
         feeSplitter.updateAppFee(app1, 1001);
     }
@@ -156,7 +154,7 @@ contract FeeSplitterTest is Test {
         feeSplitter.setAppFee(app1, 30, creator1);
         feeSplitter.deactivateApp(app1);
 
-        (, , bool active,) = feeSplitter.getAppFeeConfig(app1);
+        (,, bool active,) = feeSplitter.getAppFeeConfig(app1);
         assertFalse(active, "App should be deactivated");
     }
 
@@ -165,7 +163,7 @@ contract FeeSplitterTest is Test {
         feeSplitter.deactivateApp(app1);
         feeSplitter.activateApp(app1);
 
-        (, , bool active,) = feeSplitter.getAppFeeConfig(app1);
+        (,, bool active,) = feeSplitter.getAppFeeConfig(app1);
         assertTrue(active, "App should be reactivated");
     }
 
@@ -190,17 +188,17 @@ contract FeeSplitterTest is Test {
 
     function test_CalculateFee() public {
         feeSplitter.setAppFee(app1, 30, creator1); // 0.3%
-        
+
         uint256 grossAmount = 1000 ether;
         uint256 expectedFee = (1000 ether * 30) / 10000; // 3 ether
-        
+
         assertEq(feeSplitter.calculateFee(app1, grossAmount), expectedFee, "Fee calculation incorrect");
     }
 
     function test_CalculateFee_DifferentRates() public {
-        feeSplitter.setAppFee(app1, 30, creator1);   // DEX: 0.3%
-        feeSplitter.setAppFee(app2, 200, creator2);  // NFT: 2%
-        feeSplitter.setAppFee(app3, 500, creator1);  // Lottery: 5%
+        feeSplitter.setAppFee(app1, 30, creator1); // DEX: 0.3%
+        feeSplitter.setAppFee(app2, 200, creator2); // NFT: 2%
+        feeSplitter.setAppFee(app3, 500, creator1); // Lottery: 5%
 
         uint256 amount = 100 ether;
 
@@ -213,9 +211,9 @@ contract FeeSplitterTest is Test {
 
     function test_CollectFees_SplitsCorrectly() public {
         feeSplitter.setAppFee(app1, 30, creator1);
-        
+
         uint256 feeAmount = 10 ether;
-        
+
         vm.prank(user);
         feeSplitter.collectFees(app1, address(weth), feeAmount);
 
@@ -242,7 +240,9 @@ contract FeeSplitterTest is Test {
         feeSplitter.collectFees(app1, address(weth), 10 ether);
 
         uint256 ownerShare = 5 ether; // 50% of 10 ether
-        assertEq(feeSplitter.pendingClaims(owner, address(weth)), ownerShare, "Owner should receive unconfigured app fees");
+        assertEq(
+            feeSplitter.pendingClaims(owner, address(weth)), ownerShare, "Owner should receive unconfigured app fees"
+        );
     }
 
     function test_CollectFees_MultipleApps() public {
@@ -264,12 +264,12 @@ contract FeeSplitterTest is Test {
 
     function test_ClaimContributorRewards() public {
         feeSplitter.setAppFee(app1, 30, creator1);
-        
+
         vm.prank(user);
         feeSplitter.collectFees(app1, address(weth), 10 ether);
 
         uint256 balanceBefore = weth.balanceOf(creator1);
-        
+
         vm.prank(creator1);
         feeSplitter.claimContributorRewards();
 
@@ -279,7 +279,7 @@ contract FeeSplitterTest is Test {
 
     function test_ClaimContributorReward_SingleToken() public {
         feeSplitter.setAppFee(app1, 30, creator1);
-        
+
         vm.prank(user);
         feeSplitter.collectFees(app1, address(weth), 10 ether);
 
@@ -294,7 +294,7 @@ contract FeeSplitterTest is Test {
 
     function test_UpdateAppCreator() public {
         feeSplitter.setAppFee(app1, 30, creator1);
-        
+
         // Collect some fees first
         vm.prank(user);
         feeSplitter.collectFees(app1, address(weth), 10 ether);
@@ -332,13 +332,13 @@ contract FeeSplitterTest is Test {
 
     function test_AppCount() public {
         assertEq(feeSplitter.appCount(), 0);
-        
+
         feeSplitter.setAppFee(app1, 30, creator1);
         assertEq(feeSplitter.appCount(), 1);
-        
+
         feeSplitter.setAppFee(app2, 200, creator2);
         assertEq(feeSplitter.appCount(), 2);
-        
+
         // Updating existing app doesn't increase count
         feeSplitter.setAppFee(app1, 50, creator1);
         assertEq(feeSplitter.appCount(), 2);
@@ -353,25 +353,25 @@ contract FeeSplitterTest is Test {
     function test_EmitAppFeeConfigured() public {
         vm.expectEmit(true, true, false, true);
         emit AppFeeConfigured(app1, 30, creator1, "DEX");
-        
+
         feeSplitter.setAppFeeWithType(app1, 30, creator1, "DEX");
     }
 
     function test_EmitAppFeeUpdated() public {
         feeSplitter.setAppFee(app1, 30, creator1);
-        
+
         vm.expectEmit(true, false, false, true);
         emit AppFeeUpdated(app1, 30, 50);
-        
+
         feeSplitter.updateAppFee(app1, 50);
     }
 
     function test_EmitFeesCollected() public {
         feeSplitter.setAppFee(app1, 30, creator1);
-        
+
         vm.expectEmit(true, true, false, true);
         emit FeesCollected(app1, address(weth), 10 ether, 10 ether);
-        
+
         vm.prank(user);
         feeSplitter.collectFees(app1, address(weth), 10 ether);
     }

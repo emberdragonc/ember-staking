@@ -19,7 +19,7 @@ contract DeployVesterScript is Script {
         RewardVester vester = new RewardVester(
             EMBER_MAINNET,
             STAKING_MAINNET,
-            deployer  // Owner = deployer (Ember's wallet)
+            deployer // Owner = deployer (Ember's wallet)
         );
 
         console.log("RewardVester:", address(vester));

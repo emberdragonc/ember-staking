@@ -55,25 +55,25 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
     /// @notice Fee configuration for each app
     /// @dev feeBps is the fee taken from transactions (e.g., 30 = 0.3% for DEX)
     struct AppFeeConfig {
-        uint256 feeBps;      // Fee in basis points (100 = 1%)
+        uint256 feeBps; // Fee in basis points (100 = 1%)
         address ideaCreator; // Creator who gets 50% of fees
-        bool active;         // Whether app is active
-        string appType;      // Type of app for reference (e.g., "DEX", "NFT", "LOTTERY")
+        bool active; // Whether app is active
+        string appType; // Type of app for reference (e.g., "DEX", "NFT", "LOTTERY")
     }
 
     // ============ CONSTANTS ============
     uint256 public constant MAX_BPS = 10000; // 100%
     uint256 public constant MAX_FEE_BPS = 1000; // 10% max fee cap for any app
-    
+
     // ============ RECOMMENDED FEE TIERS (in basis points) ============
     // These are constants for reference - actual fees are set per-app
-    uint256 public constant FEE_DEX = 30;           // 0.3% - Standard DEX/Swap fee
+    uint256 public constant FEE_DEX = 30; // 0.3% - Standard DEX/Swap fee
     uint256 public constant FEE_NFT_MARKETPLACE = 200; // 2.0% - NFT marketplace (OpenSea-style)
-    uint256 public constant FEE_NFT_LOW = 50;       // 0.5% - Low-fee NFT (Blur-style)
-    uint256 public constant FEE_LENDING = 25;       // 0.25% - Lending origination fee
-    uint256 public constant FEE_LOTTERY = 500;      // 5% - Lottery/Gaming rake
-    uint256 public constant FEE_PREDICTION = 300;   // 3% - Prediction markets
-    uint256 public constant FEE_UTILITY = 0;        // 0% - Free tools (tip-based)
+    uint256 public constant FEE_NFT_LOW = 50; // 0.5% - Low-fee NFT (Blur-style)
+    uint256 public constant FEE_LENDING = 25; // 0.25% - Lending origination fee
+    uint256 public constant FEE_LOTTERY = 500; // 5% - Lottery/Gaming rake
+    uint256 public constant FEE_PREDICTION = 300; // 3% - Prediction markets
+    uint256 public constant FEE_UTILITY = 0; // 0% - Free tools (tip-based)
 
     // ============ STATE ============
     EmberStaking public stakingContract;
@@ -177,7 +177,7 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
     /// @return recommendedBps The recommended fee in basis points
     function getRecommendedFee(string calldata appType) external pure returns (uint256 recommendedBps) {
         bytes32 typeHash = keccak256(abi.encodePacked(appType));
-        
+
         if (typeHash == keccak256("DEX") || typeHash == keccak256("SWAP")) {
             return FEE_DEX;
         } else if (typeHash == keccak256("NFT") || typeHash == keccak256("NFT_MARKETPLACE")) {
@@ -193,7 +193,7 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
         } else if (typeHash == keccak256("UTILITY") || typeHash == keccak256("TOOL")) {
             return FEE_UTILITY;
         }
-        
+
         return 250; // Default 2.5%
     }
 
@@ -212,34 +212,22 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
     /// @param feeBps Fee in basis points (100 = 1%)
     /// @param creator The idea creator who receives 50% of fees
     /// @param appType Label for the app type (e.g., "DEX", "NFT", "LOTTERY")
-    function setAppFeeWithType(
-        address app,
-        uint256 feeBps,
-        address creator,
-        string calldata appType
-    ) external onlyOwner {
+    function setAppFeeWithType(address app, uint256 feeBps, address creator, string calldata appType)
+        external
+        onlyOwner
+    {
         _setAppFee(app, feeBps, creator, appType);
     }
 
     /// @notice Internal function to set app fee config
-    function _setAppFee(
-        address app,
-        uint256 feeBps,
-        address creator,
-        string memory appType
-    ) internal {
+    function _setAppFee(address app, uint256 feeBps, address creator, string memory appType) internal {
         if (app == address(0) || creator == address(0)) revert ZeroAddress();
         if (feeBps > MAX_FEE_BPS) revert FeeTooHigh();
 
         bool isNew = appFees[app].ideaCreator == address(0);
         uint256 oldFeeBps = appFees[app].feeBps;
 
-        appFees[app] = AppFeeConfig({
-            feeBps: feeBps,
-            ideaCreator: creator,
-            active: true,
-            appType: appType
-        });
+        appFees[app] = AppFeeConfig({feeBps: feeBps, ideaCreator: creator, active: true, appType: appType});
 
         if (isNew) {
             appList.push(app);
@@ -296,14 +284,14 @@ contract FeeSplitter is Ownable, ReentrancyGuard {
         if (!supportedTokens[token]) revert ZeroAddress();
 
         AppFeeConfig storage config = appFees[app];
-        
+
         // Allow collection even without config (uses default fee, requires a recipient)
         address creator = config.ideaCreator;
         if (creator == address(0)) {
             // For unconfigured apps, fees go to owner as default recipient
             creator = owner();
         }
-        
+
         if (config.ideaCreator != address(0) && !config.active) {
             revert AppNotActive();
         }
